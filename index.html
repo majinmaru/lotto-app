@@ -426,17 +426,55 @@ async function initStatsData() {
   }
 }
 
-async function refreshDrawData() {
-  updateStatusUI('loading', '최신 회차 확인 중...');
-  try {
-    const { latestDrwNo } = await apiGet({ type: 'latest' });
-    if (statsCache.freq && statsCache.latestDrwNo >= latestDrwNo) {
-      const d = new Date(statsCache.updatedAt).toLocaleDateString('ko-KR');
-      updateStatusUI('ok', `${latestDrwNo}회차 이미 최신이에요 · ${d} 업데이트`);
-      showToast('✅ 이미 최신 데이터예요');
-      return;
+// 접속 시: 캐시 있으면 바로 상태 표시, 없으면 업데이트 안내만
+function loadStatsFromCache() {
+  if (statsCache.freq && statsCache.totalDraws > 0) {
+    const d = new Date(statsCache.updatedAt).toLocaleDateString('ko-KR');
+    const nextSat = getNextSaturdayStr();
+    const isUpToDate = statsCache.latestDrwNo >= estimatedLatestDrwNo();
+    if (isUpToDate) {
+      updateStatusUI('ok', `${statsCache.latestDrwNo}회차 최신 · ${d} 업데이트 · 다음 추첨 ${nextSat}`);
+    } else {
+      updateStatusUI('warn', `새 회차 있음 · ↻ 업데이트 버튼을 눌러주세요`);
     }
-  } catch(e) { /* 네트워크 오류면 initStatsData에서 처리 */ }
+  } else {
+    updateStatusUI('warn', '데이터 없음 · ↻ 업데이트 버튼을 눌러 데이터를 가져오세요');
+  }
+}
+
+// 다음 토요일 날짜 문자열 반환
+function getNextSaturdayStr() {
+  const now = new Date(Date.now() + 9 * 3600 * 1000); // KST
+  const day = now.getUTCDay();
+  const daysUntilSat = day === 6 ? 7 : (6 - day);
+  const nextSat = new Date(now.getTime() + daysUntilSat * 24 * 3600 * 1000);
+  return `${nextSat.getUTCMonth() + 1}/${nextSat.getUTCDate()}(토)`;
+}
+
+// 날짜 기반 현재 최신 회차 추정 (API 호출 없음)
+function estimatedLatestDrwNo() {
+  const first   = Date.UTC(2002, 11, 7, 11, 40);
+  const nowUTC  = Date.now();
+  const kstNow  = nowUTC + 9 * 3600 * 1000;
+  const todayKST = new Date(kstNow);
+  const dow     = todayKST.getUTCDay();
+  const hour    = todayKST.getUTCHours();
+  const min     = todayKST.getUTCMinutes();
+  const drawDone = dow !== 6 || hour > 20 || (hour === 20 && min >= 50);
+  const weeks   = Math.floor((kstNow - first) / (7 * 24 * 3600 * 1000));
+  return drawDone ? weeks + 1 : weeks;
+}
+
+async function refreshDrawData() {
+  // 토요일 추첨 여부 먼저 확인 (API 호출 없이)
+  const estimated = estimatedLatestDrwNo();
+  if (statsCache.freq && statsCache.latestDrwNo >= estimated) {
+    const d = new Date(statsCache.updatedAt).toLocaleDateString('ko-KR');
+    const nextSat = getNextSaturdayStr();
+    updateStatusUI('ok', `${statsCache.latestDrwNo}회차 최신 · ${d} 업데이트 · 다음 추첨 ${nextSat}`);
+    showToast(`✅ 이미 최신이에요 · 다음 추첨일: ${nextSat}`);
+    return;
+  }
   await initStatsData();
 }
 
@@ -467,7 +505,8 @@ function init() {
     document.getElementById(id).value = today
   );
   renderTickets();
-  initStatsData();
+  // 접속 시 자동 로드 안 함 — 캐시 있으면 바로 사용, 없으면 안내만
+  loadStatsFromCache();
 }
 
 // ─────────────────────────────────────────
