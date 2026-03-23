@@ -315,7 +315,7 @@ function persistTickets() {
 //  { freq:{1:N..45:N}, totalDraws, latestDrwNo, updatedAt }
 //  크기: ~500B  (원본 방식 대비 약 1/500)
 // ─────────────────────────────────────────
-let statsCache = { freq: null, totalDraws: 0, latestDrwNo: 0, updatedAt: null };
+let statsCache = { freq: null, winNums: [], totalDraws: 0, latestDrwNo: 0, updatedAt: null };
 try {
   const s = localStorage.getItem('lotto_stats');
   if (s) statsCache = JSON.parse(s);
@@ -365,14 +365,14 @@ async function initStatsData() {
         : `새 회차 ${total}개 업데이트 중...`
     );
 
-    // 기존 freq 복사 (업데이트 시 누적)
+    // 기존 freq/winNums 복사 (업데이트 시 누적)
     const accFreq = {};
     for (let i = 1; i <= 45; i++) accFreq[i] = (statsCache.freq ? (statsCache.freq[i] || 0) : 0);
+    const accWins = [...(statsCache.winNums || [])];
     let accTotal = statsCache.totalDraws || 0;
-    let loaded   = 0;
 
     for (let start = fromDrw; start <= latestDrwNo; start += PAGE) {
-      const end  = Math.min(start + PAGE - 1, latestDrwNo);
+      const end = Math.min(start + PAGE - 1, latestDrwNo);
 
       // 실패 시 1회 재시도
       let data;
@@ -388,17 +388,18 @@ async function initStatsData() {
 
       // freq 누적
       for (let i = 1; i <= 45; i++) accFreq[i] += (data.freq[i] || 0);
+      // 당첨번호 원본 누적 (당첨이력 캐싱 — 추가 API 호출 불필요)
+      if (data.winNums) accWins.push(...data.winNums);
       accTotal += data.fetchedCount;
-      loaded   += data.fetchedCount;
 
       updateLoadProgress(`${accTotal} / ${latestDrwNo}회차`);
 
-      // 배치 간 딜레이
       if (end < latestDrwNo) await new Promise(r => setTimeout(r, 150));
     }
 
     statsCache = {
       freq:        accFreq,
+      winNums:     accWins,
       totalDraws:  accTotal,
       latestDrwNo,
       updatedAt:   Date.now(),
@@ -426,7 +427,16 @@ async function initStatsData() {
 }
 
 async function refreshDrawData() {
-  statsCache.latestDrwNo = 0; // 강제 재확인
+  updateStatusUI('loading', '최신 회차 확인 중...');
+  try {
+    const { latestDrwNo } = await apiGet({ type: 'latest' });
+    if (statsCache.freq && statsCache.latestDrwNo >= latestDrwNo) {
+      const d = new Date(statsCache.updatedAt).toLocaleDateString('ko-KR');
+      updateStatusUI('ok', `${latestDrwNo}회차 이미 최신이에요 · ${d} 업데이트`);
+      showToast('✅ 이미 최신 데이터예요');
+      return;
+    }
+  } catch(e) { /* 네트워크 오류면 initStatsData에서 처리 */ }
   await initStatsData();
 }
 
@@ -801,30 +811,25 @@ async function calcProb(id) {
       ${hasStats ? `※ 데이터 출처: 동행복권 (1~${statsCache.latestDrwNo}회차)` : ''}
     </div>`;
 
-  // 당첨 이력: 50회차씩 나눠 check-range 호출
-  const histEl   = document.getElementById('win-hist');
-  const PAGE     = 50;
-  const latest   = statsCache.latestDrwNo || 1;
-  const numsStr  = t.nums.join(',');
-  const allMatches = [];
+  // 당첨 이력: statsCache.winNums에서 즉시 조회 (추가 API 호출 없음)
+  const histEl = document.getElementById('win-hist');
+  if (!histEl) return;
 
-  try {
-    for (let start = 1; start <= latest; start += PAGE) {
-      const end  = Math.min(start + PAGE - 1, latest);
-      const data = await apiGet({ type: 'check-range', nums: numsStr, from: start, to: end });
-      if (data.matches) allMatches.push(...data.matches);
-      if (histEl) histEl.textContent = `⏳ 조회 중... (${end}/${latest}회차)`;
-      if (end < latest) await new Promise(r => setTimeout(r, 80));
-    }
-    if (!histEl) return;
-    histEl.innerHTML = allMatches.length > 0
-      ? allMatches.map(m =>
-          `<div class="prob-history-item"><span>${m.drwNoDate} · 제${m.drwNo}회</span><span class="badge badge-won">1등 당첨 🏆</span></div>`
-        ).join('')
-      : '<div style="padding:8px 0;text-align:center;color:var(--text3);font-size:13px">이 번호 조합의 과거 1등 당첨 이력이 없어요</div>';
-  } catch(err) {
-    if (histEl) histEl.textContent = `조회 실패: ${err.message}`;
+  if (!statsCache.winNums || statsCache.winNums.length === 0) {
+    histEl.innerHTML = '<div style="padding:8px 0;text-align:center;color:var(--text3);font-size:13px">데이터 로드 후 조회 가능해요 (확률 탭 상단 업데이트 버튼)</div>';
+    return;
   }
+
+  const targetKey = [...t.nums].sort((a, b) => a - b).join(',');
+  const matches = statsCache.winNums.filter(w =>
+    [...w.nums].sort((a, b) => a - b).join(',') === targetKey
+  );
+
+  histEl.innerHTML = matches.length > 0
+    ? matches.map(m =>
+        `<div class="prob-history-item"><span>${m.drwNoDate} · 제${m.drwNo}회</span><span class="badge badge-won">1등 당첨 🏆</span></div>`
+      ).join('')
+    : '<div style="padding:8px 0;text-align:center;color:var(--text3);font-size:13px">이 번호 조합의 과거 1등 당첨 이력이 없어요</div>';
 }
 
 // ─────────────────────────────────────────
