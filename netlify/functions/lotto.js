@@ -62,14 +62,27 @@ function fetchDraw(drwNo) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function estimateLatest() {
-  const first  = Date.UTC(2002, 11, 7);
-  const kstNow = Date.now() + 9 * 3600 * 1000;
-  return Math.floor((kstNow - first) / (7 * 24 * 3600 * 1000)) + 1;
+  // 1회차: 2002-12-07 KST 20:40 추첨
+  // KST = UTC+9 이므로 UTC 기준 2002-12-07T11:40:00Z
+  const first  = Date.UTC(2002, 11, 7, 11, 40); // 2002-12-07 20:40 KST
+  const kstNow = Date.now() + 9 * 3600 * 1000;  // 현재 KST ms
+  // 추첨 시각(20:40 KST) 이전이면 아직 해당 회차 데이터 없음 → -1
+  const nowUTC = Date.now();
+  const todayKST = new Date(nowUTC + 9 * 3600 * 1000);
+  const dayOfWeek = todayKST.getUTCDay(); // 6 = 토요일
+  const hourKST   = todayKST.getUTCHours();
+  const minKST    = todayKST.getUTCMinutes();
+  const drawDone  = dayOfWeek !== 6 || hourKST > 20 || (hourKST === 20 && minKST >= 50);
+
+  const weeks = Math.floor((nowUTC + 9*3600*1000 - first) / (7 * 24 * 3600 * 1000));
+  // drawDone=false(토요일 추첨 전)면 이번 주 회차는 아직 없음
+  return drawDone ? weeks + 1 : weeks;
 }
 
 async function resolveLatest() {
   const est = estimateLatest();
-  for (let n = est; n >= est - 2; n--) {
+  // 추정값 ~ 추정값-1 범위만 확인 (±2 범위는 불필요한 호출)
+  for (let n = est; n >= est - 1; n--) {
     try {
       const d = await fetchDraw(n);
       if (d && d.returnValue === "success") return n;
@@ -134,13 +147,18 @@ exports.handler = async (event) => {
 
       const freq = {};
       for (let i = 1; i <= 45; i++) freq[i] = 0;
+      // 당첨번호 원본도 함께 반환 → 클라이언트에서 당첨이력 캐싱 가능
+      const winNums = [];
       draws.forEach(d => {
-        [d.drwtNo1, d.drwtNo2, d.drwtNo3, d.drwtNo4, d.drwtNo5, d.drwtNo6]
-          .forEach(n => { if (n >= 1 && n <= 45) freq[n]++; });
+        const nums = [d.drwtNo1, d.drwtNo2, d.drwtNo3, d.drwtNo4, d.drwtNo5, d.drwtNo6]
+          .filter(n => n >= 1 && n <= 45)
+          .sort((a, b) => a - b);
+        nums.forEach(n => freq[n]++);
+        winNums.push({ drwNo: d.drwNo, drwNoDate: d.drwNoDate, nums });
       });
 
       return { statusCode: 200, headers: h,
-        body: JSON.stringify({ freq, fetchedCount: draws.length, from, to }) };
+        body: JSON.stringify({ freq, winNums, fetchedCount: draws.length, from, to }) };
     }
 
     // ── check-range (50회차 이하 당첨 이력 탐색) ─────────────
