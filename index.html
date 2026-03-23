@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>행운은 내 손으로 — 로또 티켓 기록</title>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0a0f;--surface:#12121a;--surface2:#1a1a26;--border:#2a2a3d;
+    --gold:#f5c842;--gold2:#e8a800;--red:#ff4757;--green:#2ed573;
+    --text:#e8e8f0;--text2:#8888aa;--text3:#555570;
+    --radius:16px;--shadow:0 8px 32px rgba(0,0,0,0.5);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;min-height:100vh;padding-bottom:80px;}
+
+  .header{background:linear-gradient(135deg,#0a0a0f 0%,#1a1020 50%,#0a0a0f 100%);border-bottom:1px solid var(--border);padding:28px 20px 20px;text-align:center;position:relative;overflow:hidden;}
+  .header::before{content:'';position:absolute;top:-60px;left:50%;transform:translateX(-50%);width:300px;height:120px;background:radial-gradient(ellipse,rgba(245,200,66,0.15) 0%,transparent 70%);pointer-events:none;}
+  .header-title{font-family:'Black Han Sans',sans-serif;font-size:28px;letter-spacing:2px;color:var(--gold);text-shadow:0 0 20px rgba(245,200,66,0.4);}
+  .header-sub{font-size:12px;color:var(--text3);margin-top:4px;letter-spacing:4px;text-transform:uppercase;}
+
+  .nav{display:flex;background:var(--surface);border-bottom:1px solid var(--border);}
+  .nav-btn{flex:1;padding:14px 8px;background:none;border:none;color:var(--text3);font-family:'Noto Sans KR',sans-serif;font-size:12px;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;}
+  .nav-btn.active{color:var(--gold);border-bottom-color:var(--gold);}
+  .nav-btn .nav-icon{display:block;font-size:18px;margin-bottom:3px;}
+
+  .page{display:none;padding:20px;max-width:600px;margin:0 auto;}
+  .page.active{display:block;}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;box-shadow:var(--shadow);}
+  .card-title{font-family:'Black Han Sans',sans-serif;font-size:16px;color:var(--gold);margin-bottom:16px;letter-spacing:1px;}
+
+  .ball-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:6px;margin-bottom:16px;}
+  .ball{aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;border:1.5px solid var(--border);background:var(--surface2);color:var(--text3);cursor:pointer;transition:all .15s;user-select:none;}
+  .ball:hover{border-color:var(--gold);color:var(--gold);}
+  .ball.selected{background:var(--gold);border-color:var(--gold2);color:#1a1000;box-shadow:0 0 12px rgba(245,200,66,0.5);transform:scale(1.05);}
+  .ball.color-1{background:#fbc400;border-color:#e8a800;color:#1a1000;}
+  .ball.color-2{background:#69c8f2;border-color:#4ab0e0;color:#0a1a2a;}
+  .ball.color-3{background:#ff7272;border-color:#e05555;color:#1a0000;}
+  .ball.color-4{background:#aaaaaa;border-color:#888;color:#1a1a1a;}
+  .ball.color-5{background:#b0d840;border-color:#8cba20;color:#1a2800;}
+
+  .selected-row{display:flex;gap:8px;min-height:44px;align-items:center;margin-bottom:16px;padding:10px 14px;background:var(--surface2);border-radius:12px;border:1px dashed var(--border);}
+  .selected-ball{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;flex-shrink:0;}
+  .selected-count{margin-left:auto;font-size:12px;color:var(--text3);}
+
+  .btn{padding:12px 20px;border-radius:10px;border:none;font-family:'Noto Sans KR',sans-serif;font-size:14px;font-weight:500;cursor:pointer;transition:all .2s;}
+  .btn-gold{background:var(--gold);color:#1a1000;}
+  .btn-gold:hover{background:var(--gold2);}
+  .btn-outline{background:transparent;color:var(--text2);border:1px solid var(--border);}
+  .btn-outline:hover{border-color:var(--gold);color:var(--gold);}
+  .btn-danger{background:transparent;color:var(--red);border:1px solid rgba(255,71,87,0.3);}
+  .btn-danger:hover{background:rgba(255,71,87,0.1);}
+  .btn-row{display:flex;gap:10px;flex-wrap:wrap;}
+
+  .tickets-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
+  .ticket-count-badge{font-size:12px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;white-space:nowrap;flex-shrink:0;}
+  .sort-select{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:8px 28px 8px 12px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:12px;cursor:pointer;flex:1;min-width:0;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23555570'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;}
+  .sort-select:focus{outline:none;border-color:var(--gold);}
+
+  .ticket{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;transition:border-color .2s;}
+  .ticket:hover{border-color:rgba(245,200,66,0.3);}
+  .ticket.won{border-color:rgba(245,200,66,0.6);}
+  .ticket-header{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:var(--surface2);gap:10px;}
+  .ticket-nums{display:flex;gap:5px;flex-wrap:wrap;flex:1;}
+  .mini-ball{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;flex-shrink:0;}
+  .ticket-meta{font-size:11px;color:var(--text3);text-align:right;flex-shrink:0;}
+  .ticket-body{padding:14px 16px;}
+  .history-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--surface2);font-size:13px;gap:8px;}
+  .history-row:last-child{border-bottom:none;}
+  .badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:'Space Mono',monospace;white-space:nowrap;}
+  .badge-count{background:rgba(245,200,66,0.15);color:var(--gold);border:1px solid rgba(245,200,66,0.3);}
+  .badge-won{background:rgba(46,213,115,0.15);color:var(--green);border:1px solid rgba(46,213,115,0.3);}
+  .win-strip{padding:8px 16px;display:flex;gap:8px;flex-wrap:wrap;background:rgba(245,200,66,0.05);border-top:1px solid rgba(245,200,66,0.15);}
+  .win-tag{font-size:11px;color:var(--gold);}
+  .ticket-actions{display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--border);flex-wrap:wrap;}
+
+  .pagination{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:16px;flex-wrap:wrap;}
+  .page-btn{width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-family:'Space Mono',monospace;font-size:13px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;}
+  .page-btn:hover:not(:disabled){border-color:var(--gold);color:var(--gold);}
+  .page-btn.active{background:var(--gold);color:#1a1000;border-color:var(--gold);font-weight:700;}
+  .page-btn:disabled{opacity:.3;cursor:not-allowed;}
+
+  /* PROB PAGE */
+  .prob-search-wrap{position:relative;margin-bottom:0;}
+  .prob-search-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:13px 40px 13px 16px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;cursor:pointer;}
+  .prob-search-input:focus{outline:none;border-color:var(--gold);}
+  .prob-search-icon{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:16px;pointer-events:none;}
+  .prob-dropdown{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;z-index:60;max-height:280px;overflow-y:auto;box-shadow:var(--shadow);}
+  .prob-dropdown.open{display:block;}
+  .prob-dd-item{display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--surface2);transition:background .1s;}
+  .prob-dd-item:last-child{border-bottom:none;}
+  .prob-dd-item:hover{background:var(--surface2);}
+  .prob-dd-empty{padding:20px;text-align:center;color:var(--text3);font-size:13px;}
+  .prob-result-inner{margin-top:16px;padding-top:16px;border-top:1px solid var(--border);}
+  .prob-display{background:linear-gradient(135deg,#1a1a26,#12121a);border:1px solid rgba(245,200,66,0.3);border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;}
+  .prob-num{font-family:'Space Mono',monospace;font-size:28px;color:var(--gold);font-weight:700;text-shadow:0 0 20px rgba(245,200,66,0.3);}
+  .prob-label{font-size:12px;color:var(--text3);margin-top:4px;}
+  .prob-history-item{padding:10px 14px;background:var(--surface2);border-radius:10px;margin-bottom:8px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+
+  /* DATA STATUS BAR */
+  .data-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:16px;font-size:12px;flex-wrap:wrap;}
+  .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .status-dot.ok{background:var(--green);}
+  .status-dot.warn{background:var(--gold);}
+  .status-dot.err{background:var(--red);}
+  .status-dot.loading{background:var(--text3);animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+  .status-info{display:flex;align-items:center;gap:8px;color:var(--text2);}
+  .btn-refresh{background:none;border:1px solid var(--border);border-radius:8px;padding:5px 12px;color:var(--text3);font-size:11px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;}
+  .btn-refresh:hover{border-color:var(--gold);color:var(--gold);}
+
+  /* LOADING OVERLAY */
+  .load-overlay{position:fixed;inset:0;background:rgba(10,10,15,0.92);z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+  .load-overlay.hidden{display:none;}
+  .load-spinner{width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .load-text{font-size:14px;color:var(--text2);text-align:center;line-height:1.8;}
+  .load-progress{font-family:'Space Mono',monospace;font-size:20px;color:var(--gold);}
+
+  .empty{text-align:center;padding:40px 20px;color:var(--text3);}
+  .empty-icon{font-size:48px;margin-bottom:12px;}
+  .empty-text{font-size:14px;line-height:1.8;}
+
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:100;align-items:center;justify-content:center;padding:20px;}
+  .modal-bg.open{display:flex;}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;}
+  .modal-title{font-family:'Black Han Sans',sans-serif;font-size:18px;color:var(--gold);margin-bottom:20px;}
+
+  .form-group{margin-bottom:16px;}
+  .form-label{font-size:12px;color:var(--text3);margin-bottom:8px;display:block;letter-spacing:1px;}
+  .form-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;}
+  .form-input:focus{outline:none;border-color:var(--gold);}
+  select.form-input{appearance:none;}
+
+  .confirm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:150;align-items:center;justify-content:center;padding:20px;}
+  .confirm-overlay.open{display:flex;}
+  .confirm-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px 24px;width:100%;max-width:320px;text-align:center;}
+  .confirm-title{font-family:'Black Han Sans',sans-serif;font-size:18px;color:var(--red);margin-bottom:10px;}
+  .confirm-msg{font-size:13px;color:var(--text2);margin-bottom:24px;line-height:1.7;}
+  .confirm-btns{display:flex;gap:10px;justify-content:center;}
+
+  .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 20px;font-size:13px;color:var(--text);z-index:200;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .divider{height:1px;background:var(--border);margin:16px 0;}
+  .section-label{font-size:11px;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;}
+  .expand-btn{background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:4px;}
+  .expand-btn:hover{color:var(--gold);}
+  .hidden{display:none;}
+  .expand-icon{transition:transform .2s;display:inline-block;}
+  .expand-icon.open{transform:rotate(180deg);}
+</style>
+</head>
+<body>
+
+<!-- LOADING OVERLAY -->
+<div class="load-overlay hidden" id="load-overlay">
+  <div class="load-spinner"></div>
+  <div class="load-progress" id="load-progress"></div>
+  <div class="load-text" id="load-text">동행복권 데이터를 불러오는 중이에요<br>처음 한 번만 시간이 걸려요</div>
+</div>
+
+<div class="header">
+  <div class="header-title">🍀 행운은 내 손으로</div>
+  <div class="header-sub">LOTTO TICKET RECORDER</div>
+</div>
+
+<nav class="nav">
+  <button class="nav-btn active" onclick="showPage('page-add',this)"><span class="nav-icon">✍️</span>번호입력</button>
+  <button class="nav-btn" onclick="showPage('page-tickets',this)"><span class="nav-icon">🎫</span>내 티켓</button>
+  <button class="nav-btn" onclick="showPage('page-prob',this)"><span class="nav-icon">📊</span>확률분석</button>
+</nav>
+
+<!-- PAGE 1 -->
+<div id="page-add" class="page active">
+  <div class="card">
+    <div class="card-title">🔢 번호 선택 (6개)</div>
+    <div class="ball-grid" id="ball-grid"></div>
+    <div class="selected-row" id="selected-row">
+      <span style="font-size:12px;color:var(--text3)">번호를 선택하세요</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="randomPick()">🎲 랜덤 추천</button>
+      <button class="btn btn-outline" onclick="clearSelection()">↺ 초기화</button>
+      <button class="btn btn-gold" onclick="openSaveModal()" style="margin-left:auto">저장하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 2 -->
+<div id="page-tickets" class="page">
+  <div class="tickets-toolbar">
+    <span class="ticket-count-badge" id="ticket-count-badge">총 0개</span>
+    <select class="sort-select" id="sort-select" onchange="currentPage=1;renderTickets()">
+      <option value="recent-update">최근 업데이트순</option>
+      <option value="reg-newest">등록 최신순</option>
+      <option value="reg-oldest">등록 오래된 순</option>
+      <option value="wins-most">당첨 최다순</option>
+      <option value="wins-least">당첨 최소순</option>
+      <option value="win-date-newest">당첨일 최신순</option>
+      <option value="win-date-oldest">당첨일 오래된 순</option>
+    </select>
+  </div>
+  <div id="tickets-list"></div>
+  <div id="pagination" class="pagination"></div>
+</div>
+
+<!-- PAGE 3 -->
+<div id="page-prob" class="page">
+  <div class="card">
+    <div class="card-title">📊 당첨 확률 분석</div>
+
+    <!-- 데이터 상태 표시 -->
+    <div class="data-status" id="data-status">
+      <div class="status-info">
+        <span class="status-dot loading" id="status-dot"></span>
+        <span id="status-text">데이터 확인 중...</span>
+      </div>
+      <button class="btn-refresh" onclick="refreshDrawData()">↻ 업데이트</button>
+    </div>
+
+    <p style="font-size:13px;color:var(--text2);margin-bottom:14px">분석할 티켓을 선택하세요</p>
+    <div class="prob-search-wrap" id="prob-wrap">
+      <input type="text" class="prob-search-input" id="prob-input"
+        placeholder="번호 검색 또는 클릭하여 선택..."
+        oninput="onProbInput()" onclick="onProbClick()" autocomplete="off">
+      <span class="prob-search-icon">▾</span>
+      <div class="prob-dropdown" id="prob-dropdown"></div>
+    </div>
+    <div id="prob-result" class="hidden prob-result-inner"></div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-bg" id="save-modal">
+  <div class="modal">
+    <div class="modal-title">✅ 티켓 저장</div>
+    <div id="save-nums-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px"></div>
+    <div class="form-group"><label class="form-label">구매 일자</label><input type="date" class="form-input" id="save-date"></div>
+    <div class="form-group"><label class="form-label">메모 (선택)</label><input type="text" class="form-input" id="save-memo" placeholder="ex. 이번주엔 꼭!"></div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="closeModal('save-modal')">취소</button>
+      <button class="btn btn-gold" onclick="saveTicket()" style="margin-left:auto">저장</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="win-modal">
+  <div class="modal">
+    <div class="modal-title">🏆 당첨 기록 추가</div>
+    <div id="win-nums-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px"></div>
+    <div class="form-group"><label class="form-label">당첨 일자</label><input type="date" class="form-input" id="win-date"></div>
+    <div class="form-group">
+      <label class="form-label">당첨 등수</label>
+      <select class="form-input" id="win-rank">
+        <option value="1">1등 🎉</option><option value="2">2등 🥈</option><option value="3">3등 🥉</option><option value="4">4등</option><option value="5" selected>5등</option>
+      </select>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="closeModal('win-modal')">취소</button>
+      <button class="btn btn-gold" onclick="addWin()" style="margin-left:auto">기록</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="buy-modal">
+  <div class="modal">
+    <div class="modal-title">🛒 구매 이력 추가</div>
+    <div id="buy-nums-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px"></div>
+    <div class="form-group"><label class="form-label">구매 일자</label><input type="date" class="form-input" id="buy-date"></div>
+    <div class="form-group"><label class="form-label">메모 (선택)</label><input type="text" class="form-input" id="buy-memo" placeholder="ex. 3회차 도전!"></div>
+    <div class="btn-row">
+      <button class="btn btn-outline" onclick="closeModal('buy-modal')">취소</button>
+      <button class="btn btn-gold" onclick="addBuy()" style="margin-left:auto">추가</button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <div class="confirm-title">🗑️ 티켓 삭제</div>
+    <div class="confirm-msg">이 티켓을 삭제할까요?<br>삭제 후 복구할 수 없어요.</div>
+    <div class="confirm-btns">
+      <button class="btn btn-outline" onclick="closeConfirm()">취소</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">삭제하기</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════
+//  CONFIG — Netlify 배포 후 자동으로 같은 도메인 사용
+// ═══════════════════════════════════════════
+const API_BASE = '/api/lotto'; // Netlify redirect → /.netlify/functions/lotto
+
+// ═══════════════════════════════════════════
+//  TICKET DATA (localStorage)
+// ═══════════════════════════════════════════
+let tickets = [];
+try { tickets = JSON.parse(localStorage.getItem('lotto_tickets') || '[]'); } catch(e) { tickets=[]; }
+tickets = tickets.map((t,i)=>({...t,createdAt:t.createdAt||(Date.now()-(tickets.length-i)*60000),updatedAt:t.updatedAt||(Date.now()-(tickets.length-i)*60000)}));
+persistTickets();
+
+// ═══════════════════════════════════════════
+//  DRAW DATA (동행복권 당첨 회차 데이터)
+//  구조: { draws: [{drwNo, drwNoDate, drwtNo1..6, bnusNo}], lastUpdated, latestDrwNo }
+// ═══════════════════════════════════════════
+let drawDB = { draws: [], lastUpdated: null, latestDrwNo: 0 };
+try {
+  const saved = localStorage.getItem('lotto_drawdb');
+  if (saved) drawDB = JSON.parse(saved);
+} catch(e) {}
+
+function persistDrawDB() {
+  try { localStorage.setItem('lotto_drawdb', JSON.stringify(drawDB)); } catch(e) {
+    // localStorage 용량 초과 시 오래된 데이터 정리 후 재시도
+    showToast('⚠️ 저장 공간이 부족해요. 일부 데이터가 메모리에만 유지됩니다.');
+  }
+}
+
+// ═══════════════════════════════════════════
+//  API CALLS
+// ═══════════════════════════════════════════
+async function apiGet(params) {
+  const qs = new URLSearchParams(params).toString();
+  const res = await fetch(`${API_BASE}?${qs}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// 최신 회차 번호 조회
+async function fetchLatestDrwNo() {
+  const data = await apiGet({ type: 'latest' });
+  return data.latestDrwNo;
+}
+
+// 범위 일괄 조회 (100회차씩 배치)
+async function fetchRange(from, to, onProgress) {
+  const results = [];
+  const batchSize = 50; // Netlify 함수 타임아웃(10s) 내 처리 가능한 최대치
+  for (let start = from; start <= to; start += batchSize) {
+    const end = Math.min(start + batchSize - 1, to);
+    const data = await apiGet({ type: 'range', from: start, to: end });
+    if (data.draws) results.push(...data.draws);
+    if (onProgress) onProgress(results.length, to - from + 1);
+    // 배치 간 짧은 딜레이로 서버 부하 방지
+    if (end < to) await new Promise(r => setTimeout(r, 300));
+  }
+  return results;
+}
+
+// ═══════════════════════════════════════════
+//  DRAW DB INIT & UPDATE
+// ═══════════════════════════════════════════
+async function initDrawData() {
+  updateStatusUI('loading', '데이터 확인 중...');
+
+  try {
+    const latestDrwNo = await fetchLatestDrwNo();
+
+    // 처음 실행 (데이터 없음)
+    if (drawDB.draws.length === 0) {
+      showLoadOverlay(true, '전체 회차 데이터를 가져오는 중이에요\n처음 한 번만 시간이 걸려요 (약 1~2분)');
+      const draws = await fetchRange(1, latestDrwNo, (loaded, total) => {
+        updateLoadProgress(`${loaded} / ${total}회차`);
+      });
+      drawDB = { draws, lastUpdated: Date.now(), latestDrwNo };
+      persistDrawDB();
+      showLoadOverlay(false);
+      updateStatusUI('ok', `${latestDrwNo}회차까지 로드 완료 · 전체 ${draws.length}회차`);
+      showToast(`✅ ${draws.length}회차 데이터 로드 완료!`);
+      return;
+    }
+
+    // 이미 최신
+    if (drawDB.latestDrwNo >= latestDrwNo) {
+      const lastDate = drawDB.lastUpdated ? new Date(drawDB.lastUpdated).toLocaleDateString('ko-KR') : '-';
+      updateStatusUI('ok', `${latestDrwNo}회차 최신 · 전체 ${drawDB.draws.length}회차 · ${lastDate} 업데이트`);
+      return;
+    }
+
+    // 새 회차 추가
+    const missing = latestDrwNo - drawDB.latestDrwNo;
+    updateStatusUI('loading', `새 회차 ${missing}개 업데이트 중...`);
+    const newDraws = await fetchRange(drawDB.latestDrwNo + 1, latestDrwNo);
+    drawDB.draws.push(...newDraws);
+    drawDB.latestDrwNo = latestDrwNo;
+    drawDB.lastUpdated = Date.now();
+    persistDrawDB();
+    const lastDate = new Date(drawDB.lastUpdated).toLocaleDateString('ko-KR');
+    updateStatusUI('ok', `${latestDrwNo}회차까지 최신 · 전체 ${drawDB.draws.length}회차 · ${lastDate} 업데이트`);
+    showToast(`🆕 ${newDraws.length}개 회차 업데이트 완료!`);
+
+  } catch(err) {
+    console.error(err);
+    if (drawDB.draws.length > 0) {
+      // 오프라인이어도 캐시 데이터로 동작
+      updateStatusUI('warn', `오프라인 · 캐시 데이터 사용 중 (${drawDB.latestDrwNo}회차까지)`);
+    } else {
+      updateStatusUI('err', 'API 연결 실패 · Netlify 배포 후 사용 가능');
+    }
+    showLoadOverlay(false);
+  }
+}
+
+async function refreshDrawData() {
+  if (drawDB.draws.length === 0) {
+    await initDrawData();
+    return;
+  }
+  updateStatusUI('loading', '최신 데이터 확인 중...');
+  try {
+    const latestDrwNo = await fetchLatestDrwNo();
+    if (drawDB.latestDrwNo >= latestDrwNo) {
+      updateStatusUI('ok', `${latestDrwNo}회차 이미 최신이에요`);
+      showToast('✅ 이미 최신 데이터예요');
+      return;
+    }
+    const newDraws = await fetchRange(drawDB.latestDrwNo + 1, latestDrwNo);
+    drawDB.draws.push(...newDraws);
+    drawDB.latestDrwNo = latestDrwNo;
+    drawDB.lastUpdated = Date.now();
+    persistDrawDB();
+    updateStatusUI('ok', `${latestDrwNo}회차까지 최신 · 전체 ${drawDB.draws.length}회차`);
+    showToast(`🆕 ${newDraws.length}개 회차 업데이트!`);
+  } catch(err) {
+    updateStatusUI('err', '업데이트 실패');
+    showToast('⚠️ 업데이트에 실패했어요');
+  }
+}
+
+// ═══════════════════════════════════════════
+//  FREQUENCY & HISTORY COMPUTE (from drawDB)
+// ═══════════════════════════════════════════
+function computeFrequency() {
+  const freq = {};
+  for (let i = 1; i <= 45; i++) freq[i] = 0;
+  drawDB.draws.forEach(d => {
+    [d.drwtNo1,d.drwtNo2,d.drwtNo3,d.drwtNo4,d.drwtNo5,d.drwtNo6].forEach(n => {
+      if (n) freq[n]++;
+    });
+    // 보너스 번호는 확률 계산에서 제외 (당첨 6개 기준)
+  });
+  return freq;
+}
+
+function findWinHistory(nums) {
+  // 6개 번호가 모두 일치하는 회차 탐색
+  const set = new Set(nums);
+  return drawDB.draws.filter(d => {
+    const drawn = [d.drwtNo1,d.drwtNo2,d.drwtNo3,d.drwtNo4,d.drwtNo5,d.drwtNo6];
+    return drawn.every(n => set.has(n));
+  });
+}
+
+// ═══════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════
+function updateStatusUI(state, text) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  dot.className = 'status-dot ' + state;
+  txt.textContent = text;
+}
+
+function showLoadOverlay(show, text) {
+  const el = document.getElementById('load-overlay');
+  if (show) {
+    el.classList.remove('hidden');
+    if (text) document.getElementById('load-text').textContent = text;
+    document.getElementById('load-progress').textContent = '';
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+function updateLoadProgress(text) {
+  document.getElementById('load-progress').textContent = text;
+}
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+function init() {
+  buildBallGrid();
+  const today = new Date().toISOString().split('T')[0];
+  ['save-date','win-date','buy-date'].forEach(id => document.getElementById(id).value = today);
+  renderTickets();
+  initDrawData(); // 비동기로 실행 (앱 사용을 막지 않음)
+}
+
+// ═══════════════════════════════════════════
+//  BALL GRID
+// ═══════════════════════════════════════════
+let selectedNums = [];
+
+function buildBallGrid() {
+  const grid = document.getElementById('ball-grid');
+  grid.innerHTML = '';
+  for (let i=1;i<=45;i++) {
+    const b = document.createElement('button');
+    b.className='ball'; b.textContent=i; b.id='b'+i;
+    b.onclick=()=>toggleBall(i);
+    grid.appendChild(b);
+  }
+}
+
+function colorClass(n) {
+  if(n<=10)return'color-1'; if(n<=20)return'color-2'; if(n<=30)return'color-3'; if(n<=40)return'color-4'; return'color-5';
+}
+
+function toggleBall(n) {
+  if(selectedNums.includes(n)) {
+    selectedNums=selectedNums.filter(x=>x!==n);
+    document.getElementById('b'+n).className='ball';
+  } else {
+    if(selectedNums.length>=6){showToast('6개만 선택할 수 있어요');return;}
+    selectedNums.push(n);
+    document.getElementById('b'+n).className='ball selected';
+  }
+  renderSelectedRow();
+}
+
+function renderSelectedRow() {
+  const row=document.getElementById('selected-row');
+  const sorted=[...selectedNums].sort((a,b)=>a-b);
+  if(!sorted.length){row.innerHTML='<span style="font-size:12px;color:var(--text3)">번호를 선택하세요</span>';return;}
+  row.innerHTML=sorted.map(n=>`<div class="selected-ball ${colorClass(n)}">${n}</div>`).join('')
+    +`<span class="selected-count">${sorted.length}/6</span>`;
+}
+
+function clearSelection() {
+  selectedNums=[];
+  document.querySelectorAll('.ball.selected').forEach(b=>b.className='ball');
+  renderSelectedRow();
+}
+
+function randomPick() {
+  const needed=6-selectedNums.length;
+  if(needed===0){showToast('이미 6개가 모두 선택됐어요');return;}
+  const pool=[];
+  for(let i=1;i<=45;i++) if(!selectedNums.includes(i)) pool.push(i);
+  for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
+  pool.slice(0,needed).forEach(n=>{selectedNums.push(n);document.getElementById('b'+n).className='ball selected';});
+  renderSelectedRow();
+  showToast(needed===6?'🎲 랜덤 번호 6개 선택!':`🎲 ${needed}개 번호를 추가로 선택했어요!`);
+}
+
+// ═══════════════════════════════════════════
+//  SAVE TICKET
+// ═══════════════════════════════════════════
+function openSaveModal() {
+  if(selectedNums.length!==6){showToast('6개 번호를 먼저 선택해주세요');return;}
+  document.getElementById('save-nums-preview').innerHTML=[...selectedNums].sort((a,b)=>a-b).map(n=>miniball(n,34)).join('');
+  document.getElementById('save-modal').classList.add('open');
+}
+
+function saveTicket() {
+  const sorted=[...selectedNums].sort((a,b)=>a-b);
+  const date=document.getElementById('save-date').value;
+  const memo=document.getElementById('save-memo').value.trim();
+  if(!date){showToast('날짜를 선택해주세요');return;}
+  const key=sorted.join(','), now=Date.now();
+  const existing=tickets.find(t=>t.nums.join(',')===key);
+  if(existing){
+    existing.purchases.push({date,memo});
+    existing.purchases.sort((a,b)=>b.date.localeCompare(a.date));
+    existing.updatedAt=now;
+    showToast('✅ 기존 티켓에 구매 이력 추가');
+  } else {
+    tickets.push({id:String(now),nums:sorted,purchases:[{date,memo}],wins:[],createdAt:now,updatedAt:now});
+    showToast('🎫 새 티켓 저장 완료!');
+  }
+  persistTickets();
+  closeModal('save-modal');
+  clearSelection();
+  document.getElementById('save-memo').value='';
+  currentPage=1;
+  renderTickets();
+}
+
+// ═══════════════════════════════════════════
+//  TICKETS RENDER
+// ═══════════════════════════════════════════
+let currentPage=1, currentTicketId=null, pendingDeleteId=null;
+const PAGE_SIZE=10;
+
+function persistTickets(){localStorage.setItem('lotto_tickets',JSON.stringify(tickets));}
+
+function getSorted() {
+  const mode=document.getElementById('sort-select').value;
+  const arr=[...tickets];
+  const lw=t=>t.wins.length?[...t.wins].sort((a,b)=>b.date.localeCompare(a.date))[0].date:'';
+  if(mode==='recent-update') arr.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  else if(mode==='reg-newest') arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  else if(mode==='reg-oldest') arr.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  else if(mode==='wins-most') arr.sort((a,b)=>{const d=b.wins.length-a.wins.length;return d||((b.createdAt||0)-(a.createdAt||0));});
+  else if(mode==='wins-least') arr.sort((a,b)=>{const d=a.wins.length-b.wins.length;return d||((b.createdAt||0)-(a.createdAt||0));});
+  else if(mode==='win-date-newest') arr.sort((a,b)=>{const da=lw(a),db=lw(b);if(!da&&!db)return(b.createdAt||0)-(a.createdAt||0);if(!da)return 1;if(!db)return-1;return db.localeCompare(da);});
+  else if(mode==='win-date-oldest') arr.sort((a,b)=>{const da=lw(a),db=lw(b);if(!da&&!db)return(b.createdAt||0)-(a.createdAt||0);if(!da)return 1;if(!db)return-1;return da.localeCompare(db);});
+  return arr;
+}
+
+function renderTickets() {
+  document.getElementById('ticket-count-badge').textContent=`총 ${tickets.length}개`;
+  const list=document.getElementById('tickets-list');
+  if(!tickets.length){
+    list.innerHTML='<div class="empty"><div class="empty-icon">🎫</div><div class="empty-text">아직 저장된 티켓이 없어요<br>번호 입력 탭에서 추가해보세요</div></div>';
+    document.getElementById('pagination').innerHTML='';return;
+  }
+  const sorted=getSorted(), total=sorted.length, totalPages=Math.ceil(total/PAGE_SIZE);
+  if(currentPage>totalPages) currentPage=Math.max(1,totalPages);
+  const slice=sorted.slice((currentPage-1)*PAGE_SIZE,currentPage*PAGE_SIZE);
+  list.innerHTML=slice.map(t=>ticketCard(t)).join('');
+  renderPagination(totalPages);
+}
+
+function renderPagination(totalPages) {
+  const pg=document.getElementById('pagination');
+  if(totalPages<=1){pg.innerHTML='';return;}
+  let html=`<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
+  for(let i=1;i<=totalPages;i++) html+=`<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+  html+=`<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===totalPages?'disabled':''}>›</button>`;
+  pg.innerHTML=html;
+}
+
+function goPage(n){currentPage=n;renderTickets();window.scrollTo({top:0,behavior:'smooth'});}
+
+function ticketCard(t) {
+  const sP=[...t.purchases].sort((a,b)=>b.date.localeCompare(a.date));
+  const sW=[...t.wins].sort((a,b)=>b.date.localeCompare(a.date));
+  const lP=sP[0],oP=sP.slice(1),hasWins=sW.length>0,lW=sW[0],oW=sW.slice(1);
+  const ballsHtml=t.nums.map(n=>`<div class="mini-ball ${colorClass(n)}">${n}</div>`).join('');
+  const winStrip=hasWins?`<div class="win-strip">${sW.slice(0,3).map(w=>`<span class="win-tag">🏆 ${w.date} · ${w.rank}등</span>`).join('')}</div>`:'';
+  const oPHtml=oP.length?`<div id="op-${t.id}" class="hidden">${oP.map(p=>`<div class="history-row"><span>${p.date}${p.memo?` <span style="color:var(--text3)">· ${p.memo}</span>`:''}</span></div>`).join('')}</div><button class="expand-btn" onclick="toggle('op-${t.id}',this)"><span>이전 구매 이력 ${oP.length}건</span><span class="expand-icon">▼</span></button>`:'';
+  const oWHtml=oW.length?`<div id="ow-${t.id}" class="hidden">${oW.map(w=>`<div class="history-row"><span>${w.date}</span><span class="badge badge-won">${w.rank}등</span></div>`).join('')}</div><button class="expand-btn" onclick="toggle('ow-${t.id}',this)"><span>이전 당첨 이력 ${oW.length}건</span><span class="expand-icon">▼</span></button>`:'';
+  return`<div class="ticket${hasWins?' won':''}" id="tk-${t.id}"><div class="ticket-header" onclick="toggle('tb-${t.id}',this)"><div class="ticket-nums">${ballsHtml}</div><div class="ticket-meta"><div style="margin-bottom:4px"><span class="badge badge-count">${t.purchases.length}회 구매</span></div><div>${lP?.date||''}</div></div></div>${winStrip}<div id="tb-${t.id}" class="hidden"><div class="ticket-body"><div class="section-label">구매 이력</div><div class="history-row"><span>${lP?.date||''}${lP?.memo?` <span style="color:var(--text3)">· ${lP.memo}</span>`:''}</span><span class="badge badge-count">최신</span></div>${oPHtml}${hasWins?`<div class="divider"></div><div class="section-label">당첨 이력</div><div class="history-row"><span>${lW.date}</span><span class="badge badge-won">${lW.rank}등 🏆</span></div>${oWHtml}`:''}</div><div class="ticket-actions"><button class="btn btn-outline" style="font-size:12px;padding:8px 12px" onclick="openBuyModal('${t.id}')">🛒 구매 추가</button><button class="btn btn-outline" style="font-size:12px;padding:8px 12px;color:var(--green);border-color:rgba(46,213,115,0.3)" onclick="openWinModal('${t.id}')">🏆 당첨 기록</button><button class="btn btn-danger" style="font-size:12px;padding:8px 12px" onclick="askDelete('${t.id}')">삭제</button></div></div></div>`;
+}
+
+function toggle(id,btn){const el=document.getElementById(id);if(!el)return;el.classList.toggle('hidden');const ic=btn.querySelector?.('.expand-icon');if(ic)ic.classList.toggle('open');}
+
+function askDelete(id){pendingDeleteId=id;document.getElementById('confirm-overlay').classList.add('open');}
+function closeConfirm(){pendingDeleteId=null;document.getElementById('confirm-overlay').classList.remove('open');}
+function confirmDelete(){
+  if(!pendingDeleteId)return;
+  tickets=tickets.filter(t=>t.id!==pendingDeleteId);
+  pendingDeleteId=null;
+  document.getElementById('confirm-overlay').classList.remove('open');
+  const tp=Math.ceil(tickets.length/PAGE_SIZE);
+  if(currentPage>tp) currentPage=Math.max(1,tp);
+  persistTickets();renderTickets();showToast('티켓이 삭제됐어요');
+}
+
+function openBuyModal(id){currentTicketId=id;const t=tickets.find(x=>x.id===id);document.getElementById('buy-nums-preview').innerHTML=t.nums.map(n=>miniball(n,34)).join('');document.getElementById('buy-modal').classList.add('open');}
+function addBuy(){
+  const date=document.getElementById('buy-date').value,memo=document.getElementById('buy-memo').value.trim();
+  if(!date){showToast('날짜를 선택해주세요');return;}
+  const t=tickets.find(x=>x.id===currentTicketId);
+  t.purchases.push({date,memo});t.purchases.sort((a,b)=>b.date.localeCompare(a.date));t.updatedAt=Date.now();
+  persistTickets();renderTickets();closeModal('buy-modal');document.getElementById('buy-memo').value='';showToast('🛒 구매 이력이 추가됐어요');
+}
+
+function openWinModal(id){currentTicketId=id;const t=tickets.find(x=>x.id===id);document.getElementById('win-nums-preview').innerHTML=t.nums.map(n=>miniball(n,34)).join('');document.getElementById('win-modal').classList.add('open');}
+function addWin(){
+  const date=document.getElementById('win-date').value,rank=parseInt(document.getElementById('win-rank').value);
+  if(!date){showToast('날짜를 선택해주세요');return;}
+  const t=tickets.find(x=>x.id===currentTicketId);
+  t.wins.push({date,rank});t.wins.sort((a,b)=>b.date.localeCompare(a.date));t.updatedAt=Date.now();
+  persistTickets();renderTickets();closeModal('win-modal');showToast(`🏆 ${rank}등 당첨 기록 완료!`);
+}
+
+// ═══════════════════════════════════════════
+//  PROBABILITY
+// ═══════════════════════════════════════════
+function onProbClick(){buildDD(document.getElementById('prob-input').value);document.getElementById('prob-dropdown').classList.add('open');}
+function onProbInput(){buildDD(document.getElementById('prob-input').value);document.getElementById('prob-dropdown').classList.add('open');}
+
+function buildDD(query) {
+  const dd=document.getElementById('prob-dropdown');
+  if(!tickets.length){dd.innerHTML='<div class="prob-dd-empty">저장된 티켓이 없어요</div>';return;}
+  const q=query.trim();
+  const filtered=!q?tickets:tickets.filter(t=>{
+    const tokens=q.split(/[\s,]+/).filter(s=>/\d/.test(s));
+    return tokens.every(tok=>t.nums.some(n=>String(n).includes(tok)));
+  });
+  if(!filtered.length){dd.innerHTML='<div class="prob-dd-empty">검색 결과가 없어요</div>';return;}
+  dd.innerHTML=filtered.map(t=>`<div class="prob-dd-item" onclick="selectTicket('${t.id}')"><div style="display:flex;gap:3px;">${t.nums.map(n=>`<div class="mini-ball ${colorClass(n)}" style="width:24px;height:24px;font-size:9px">${n}</div>`).join('')}</div><span style="margin-left:auto;font-size:11px;color:var(--text3);white-space:nowrap">${t.purchases.length}회 구매</span></div>`).join('');
+}
+
+function selectTicket(id) {
+  const t=tickets.find(x=>x.id===id);
+  document.getElementById('prob-input').value=t.nums.join('  ');
+  document.getElementById('prob-dropdown').classList.remove('open');
+  calcProb(id);
+}
+
+function calcProb(id) {
+  const t=tickets.find(x=>x.id===id);
+  if(!t)return;
+
+  const totalDraws = drawDB.draws.length || 1;
+  const hasRealData = drawDB.draws.length > 0;
+
+  // 번호별 빈도 계산
+  let freq;
+  if(hasRealData) {
+    freq = computeFrequency();
+  } else {
+    // 폴백: 균등 분포
+    freq = {};
+    for(let i=1;i<=45;i++) freq[i]=Math.round(totalDraws*6/45);
+  }
+
+  let prob=1;
+  const numProbs=[];
+  t.nums.forEach(n=>{
+    const p=freq[n]/totalDraws; // 한 회차에서 이 번호가 나올 확률
+    numProbs.push({n,p:p*100,count:freq[n]});
+    prob*=p;
+  });
+  const probPct=(prob*100).toFixed(7);
+
+  // 과거 당첨 이력
+  const winHistory = hasRealData ? findWinHistory(t.nums) : [];
+
+  const result=document.getElementById('prob-result');
+  result.classList.remove('hidden');
+  result.innerHTML=`
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+      ${t.nums.map(n=>`<div class="mini-ball ${colorClass(n)}">${n}</div>`).join('')}
+    </div>
+    <div class="prob-display">
+      <div class="prob-num">${probPct}%</div>
+      <div class="prob-label">이 번호 조합의 추정 당첨 확률${!hasRealData?' (실제 데이터 없음 · 배포 후 정확한 확률 계산)':''}</div>
+    </div>
+    <div class="section-label" style="margin-bottom:10px">번호별 출현 확률 (${totalDraws}회차 기준)</div>
+    ${numProbs.map(({n,p,count})=>`
+      <div class="prob-history-item">
+        <span style="display:flex;align-items:center;gap:8px">
+          <div class="mini-ball ${colorClass(n)}" style="width:24px;height:24px;font-size:9px;flex-shrink:0">${n}</div>
+          ${n}번 <span style="color:var(--text3);font-size:11px">(${count}회 출현)</span>
+        </span>
+        <span style="font-family:'Space Mono',monospace;color:var(--gold)">${p.toFixed(4)}%</span>
+      </div>`).join('')}
+    <div class="divider"></div>
+    <div class="section-label">과거 당첨 이력 (전체 ${totalDraws}회차 기준)</div>
+    ${!hasRealData
+      ? `<div style="padding:16px;text-align:center;color:var(--text3);font-size:13px">Netlify 배포 후 실제 데이터로 조회 가능해요</div>`
+      : winHistory.length>0
+        ? winHistory.map(w=>`<div class="prob-history-item"><span>${w.drwNoDate} · 제${w.drwNo}회</span><span class="badge badge-won">1등 당첨 🏆</span></div>`).join('')
+        : `<div style="padding:16px;text-align:center;color:var(--text3);font-size:13px">이 번호 조합의 과거 1등 당첨 이력이 없어요</div>`
+    }
+    <div style="font-size:11px;color:var(--text3);margin-top:12px;line-height:1.7">
+      ※ 출현 확률 = 해당 번호의 누적 출현 횟수 ÷ 전체 회차 수<br>
+      ※ 조합 확률 = 각 번호 출현 확률의 곱<br>
+      ${hasRealData?`※ 데이터 출처: 동행복권 (1회~${drawDB.latestDrwNo}회차)`:''}
+    </div>`;
+}
+
+// ═══════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════
+function miniball(n,size){return`<div class="${colorClass(n)}" style="width:${size}px;height:${size}px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:${size>28?12:9}px;font-weight:700;flex-shrink:0">${n}</div>`;}
+
+function showPage(id,btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');btn.classList.add('active');
+  if(id==='page-tickets'){currentPage=1;renderTickets();}
+}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+
+document.addEventListener('click',e=>{
+  const wrap=document.getElementById('prob-wrap');
+  if(wrap&&!wrap.contains(e.target)) document.getElementById('prob-dropdown').classList.remove('open');
+});
+document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{if(e.target===bg)bg.classList.remove('open');}));
+document.getElementById('confirm-overlay').addEventListener('click',e=>{if(e.target===document.getElementById('confirm-overlay'))closeConfirm();});
+
+init();
+</script>
+</body>
+</html>
