@@ -294,7 +294,7 @@
 // ═══════════════════════════════════════════
 //  CONFIG — Netlify 배포 후 자동으로 같은 도메인 사용
 // ═══════════════════════════════════════════
-const API_BASE = '/.netlify/functions/lotto'; // Netlify redirect → /.netlify/functions/lotto
+const API_BASE = '/.netlify/functions/lotto'; // 직접 호출
 
 // ═══════════════════════════════════════════
 //  TICKET DATA (localStorage)
@@ -337,17 +337,29 @@ async function fetchLatestDrwNo() {
   return data.latestDrwNo;
 }
 
-// 범위 일괄 조회 (100회차씩 배치)
+// ★ 배치 사이즈 10 — 함수 1회 호출당 10회차, 클라이언트에서 루프
+// Netlify 무료 함수 타임아웃 10초 내 안정적으로 처리 가능한 최대치
+const BATCH = 10;
+
 async function fetchRange(from, to, onProgress) {
   const results = [];
-  const batchSize = 50; // Netlify 함수 타임아웃(10s) 내 처리 가능한 최대치
-  for (let start = from; start <= to; start += batchSize) {
-    const end = Math.min(start + batchSize - 1, to);
-    const data = await apiGet({ type: 'range', from: start, to: end });
-    if (data.draws) results.push(...data.draws);
+  for (let start = from; start <= to; start += BATCH) {
+    const end = Math.min(start + BATCH - 1, to);
+    let data;
+    // 실패 시 1회 재시도
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        data = await apiGet({ type: 'range', from: start, to: end });
+        break;
+      } catch(e) {
+        if (attempt === 1) throw e;
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+    if (data && data.draws) results.push(...data.draws);
     if (onProgress) onProgress(results.length, to - from + 1);
-    // 배치 간 짧은 딜레이로 서버 부하 방지
-    if (end < to) await new Promise(r => setTimeout(r, 300));
+    // 배치 간 100ms 딜레이 — 동행복권 서버 차단 방지
+    if (end < to) await new Promise(r => setTimeout(r, 100));
   }
   return results;
 }
@@ -363,14 +375,15 @@ async function initDrawData() {
 
     // 처음 실행 (데이터 없음)
     if (drawDB.draws.length === 0) {
-      showLoadOverlay(true, '전체 회차 데이터를 가져오는 중이에요\n처음 한 번만 시간이 걸려요 (약 1~2분)');
+      showLoadOverlay(true, `전체 ${latestDrwNo}회차 데이터를 가져오는 중이에요\n처음 한 번만 시간이 걸려요 (약 3~5분)`);
       const draws = await fetchRange(1, latestDrwNo, (loaded, total) => {
         updateLoadProgress(`${loaded} / ${total}회차`);
       });
       drawDB = { draws, lastUpdated: Date.now(), latestDrwNo };
       persistDrawDB();
       showLoadOverlay(false);
-      updateStatusUI('ok', `${latestDrwNo}회차까지 로드 완료 · 전체 ${draws.length}회차`);
+      const lastDate = new Date().toLocaleDateString('ko-KR');
+      updateStatusUI('ok', `${latestDrwNo}회차까지 로드 완료 · 전체 ${draws.length}회차 · ${lastDate} 업데이트`);
       showToast(`✅ ${draws.length}회차 데이터 로드 완료!`);
       return;
     }
@@ -395,27 +408,24 @@ async function initDrawData() {
     showToast(`🆕 ${newDraws.length}개 회차 업데이트 완료!`);
 
   } catch(err) {
-    console.error(err);
+    console.error('[initDrawData]', err);
     if (drawDB.draws.length > 0) {
-      // 오프라인이어도 캐시 데이터로 동작
       updateStatusUI('warn', `오프라인 · 캐시 데이터 사용 중 (${drawDB.latestDrwNo}회차까지)`);
     } else {
-      updateStatusUI('err', 'API 연결 실패 · Netlify 배포 후 사용 가능');
+      updateStatusUI('err', `데이터 로드 실패: ${err.message}`);
     }
     showLoadOverlay(false);
   }
 }
 
 async function refreshDrawData() {
-  if (drawDB.draws.length === 0) {
-    await initDrawData();
-    return;
-  }
+  if (drawDB.draws.length === 0) { await initDrawData(); return; }
   updateStatusUI('loading', '최신 데이터 확인 중...');
   try {
     const latestDrwNo = await fetchLatestDrwNo();
     if (drawDB.latestDrwNo >= latestDrwNo) {
-      updateStatusUI('ok', `${latestDrwNo}회차 이미 최신이에요`);
+      const lastDate = new Date(drawDB.lastUpdated).toLocaleDateString('ko-KR');
+      updateStatusUI('ok', `${latestDrwNo}회차 이미 최신 · ${lastDate} 업데이트`);
       showToast('✅ 이미 최신 데이터예요');
       return;
     }
@@ -424,10 +434,11 @@ async function refreshDrawData() {
     drawDB.latestDrwNo = latestDrwNo;
     drawDB.lastUpdated = Date.now();
     persistDrawDB();
-    updateStatusUI('ok', `${latestDrwNo}회차까지 최신 · 전체 ${drawDB.draws.length}회차`);
+    const lastDate = new Date(drawDB.lastUpdated).toLocaleDateString('ko-KR');
+    updateStatusUI('ok', `${latestDrwNo}회차까지 최신 · 전체 ${drawDB.draws.length}회차 · ${lastDate} 업데이트`);
     showToast(`🆕 ${newDraws.length}개 회차 업데이트!`);
   } catch(err) {
-    updateStatusUI('err', '업데이트 실패');
+    updateStatusUI('err', `업데이트 실패: ${err.message}`);
     showToast('⚠️ 업데이트에 실패했어요');
   }
 }
