@@ -83,17 +83,41 @@
   .page-btn:disabled{opacity:.3;cursor:not-allowed;}
 
   /* PROB PAGE */
-  .prob-search-wrap{position:relative;margin-bottom:0;}
-  .prob-search-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:13px 40px 13px 16px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;cursor:pointer;}
-  .prob-search-input:focus{outline:none;border-color:var(--gold);}
-  .prob-search-icon{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:16px;pointer-events:none;}
-  .prob-dropdown{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;z-index:60;max-height:280px;overflow-y:auto;box-shadow:var(--shadow);}
+  /* ── PROB PAGE ── */
+  .prob-select-box{position:relative;margin-bottom:0;}
+  .prob-input-wrap{display:flex;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:0 14px;gap:8px;transition:border-color .2s;}
+  .prob-input-wrap:focus-within{border-color:var(--gold);}
+  .prob-input-wrap input{flex:1;background:none;border:none;outline:none;padding:13px 0;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;min-width:0;}
+  .prob-input-wrap input::placeholder{color:var(--text3);}
+  .prob-input-clear{background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:4px;line-height:1;display:none;}
+  .prob-input-clear.visible{display:block;}
+  .prob-input-clear:hover{color:var(--text);}
+  .prob-chevron{color:var(--text3);font-size:14px;pointer-events:none;transition:transform .2s;}
+  .prob-chevron.open{transform:rotate(180deg);}
+  .prob-dropdown{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;z-index:60;max-height:320px;overflow-y:auto;box-shadow:var(--shadow);}
   .prob-dropdown.open{display:block;}
-  .prob-dd-item{display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--surface2);transition:background .1s;}
+  .prob-dd-item{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--surface2);transition:background .1s;}
   .prob-dd-item:last-child{border-bottom:none;}
-  .prob-dd-item:hover{background:var(--surface2);}
+  .prob-dd-item:hover,.prob-dd-item.selected{background:var(--surface2);}
+  .prob-dd-footer{padding:10px 14px;text-align:center;font-size:12px;color:var(--text3);border-top:1px solid var(--surface2);cursor:pointer;}
+  .prob-dd-footer:hover{color:var(--gold);}
   .prob-dd-empty{padding:20px;text-align:center;color:var(--text3);font-size:13px;}
-  .prob-result-inner{margin-top:16px;padding-top:16px;border-top:1px solid var(--border);}
+  .prob-selected-ticket{display:flex;align-items:center;gap:8px;padding:12px 14px;background:var(--surface2);border-radius:10px;margin-top:12px;flex-wrap:wrap;}
+  .prob-result-area{margin-top:16px;}
+  /* 데이터 없음 안내 박스 */
+  .no-data-box{background:var(--surface2);border:1px dashed var(--border);border-radius:12px;padding:24px 20px;text-align:center;margin-top:12px;}
+  .no-data-icon{font-size:32px;margin-bottom:10px;}
+  .no-data-msg{font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:16px;}
+  /* 데이터 상태바 */
+  .data-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:16px;font-size:12px;flex-wrap:wrap;}
+  .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .status-dot.ok{background:var(--green);}
+  .status-dot.warn{background:var(--gold);}
+  .status-dot.err{background:var(--red);}
+  .status-dot.loading{background:var(--text3);animation:pulse 1s infinite;}
+  .btn-load{background:var(--gold);border:none;border-radius:8px;padding:8px 16px;color:#1a1000;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;}
+  .btn-load:hover{background:var(--gold2);}
+  .btn-load:disabled{opacity:.5;cursor:not-allowed;}
   .prob-display{background:linear-gradient(135deg,#1a1a26,#12121a);border:1px solid rgba(245,200,66,0.3);border-radius:12px;padding:20px;text-align:center;margin-bottom:16px;}
   .prob-num{font-family:'Space Mono',monospace;font-size:28px;color:var(--gold);font-weight:700;text-shadow:0 0 20px rgba(245,200,66,0.3);}
   .prob-label{font-size:12px;color:var(--text3);margin-top:4px;}
@@ -101,11 +125,7 @@
 
   /* DATA STATUS BAR */
   .data-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:16px;font-size:12px;flex-wrap:wrap;}
-  .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-  .status-dot.ok{background:var(--green);}
-  .status-dot.warn{background:var(--gold);}
-  .status-dot.err{background:var(--red);}
-  .status-dot.loading{background:var(--text3);animation:pulse 1s infinite;}
+
   @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
   .status-info{display:flex;align-items:center;gap:8px;color:var(--text2);}
   .btn-refresh{background:none;border:1px solid var(--border);border-radius:8px;padding:5px 12px;color:var(--text3);font-size:11px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;}
@@ -209,28 +229,31 @@
 
 <!-- PAGE 3 -->
 <div id="page-prob" class="page">
+
+  <!-- 티켓 선택 카드 -->
   <div class="card">
     <div class="card-title">📊 당첨 확률 분석</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:12px">분석할 티켓을 선택하세요</p>
 
-    <!-- 데이터 상태 표시 -->
-    <div class="data-status" id="data-status">
-      <div class="status-info">
-        <span class="status-dot loading" id="status-dot"></span>
-        <span id="status-text">데이터 확인 중...</span>
+    <!-- 드롭다운 -->
+    <div class="prob-select-box" id="prob-wrap">
+      <div class="prob-input-wrap" onclick="onProbBoxClick()">
+        <input type="text" id="prob-input"
+          placeholder="번호로 검색하거나 클릭해서 선택..."
+          oninput="onProbInput(event)" autocomplete="off" readonly>
+        <button class="prob-input-clear" id="prob-clear" onclick="clearProbInput(event)">✕</button>
+        <span class="prob-chevron" id="prob-chevron">▼</span>
       </div>
-      <button class="btn-refresh" onclick="refreshDrawData()">↻ 업데이트</button>
-    </div>
-
-    <p style="font-size:13px;color:var(--text2);margin-bottom:14px">분석할 티켓을 선택하세요</p>
-    <div class="prob-search-wrap" id="prob-wrap">
-      <input type="text" class="prob-search-input" id="prob-input"
-        placeholder="번호 검색 또는 클릭하여 선택..."
-        oninput="onProbInput()" onclick="onProbClick()" autocomplete="off">
-      <span class="prob-search-icon">▾</span>
       <div class="prob-dropdown" id="prob-dropdown"></div>
     </div>
-    <div id="prob-result" class="hidden prob-result-inner"></div>
+
+    <!-- 선택된 티켓 미리보기 -->
+    <div id="prob-selected" style="display:none" class="prob-selected-ticket"></div>
   </div>
+
+  <!-- 결과 영역 -->
+  <div id="prob-result-area" class="prob-result-area"></div>
+
 </div>
 
 <!-- MODALS -->
@@ -466,24 +489,20 @@ function estimatedLatestDrwNo() {
 }
 
 async function refreshDrawData() {
-  // 토요일 추첨 여부 먼저 확인 (API 호출 없이)
-  const estimated = estimatedLatestDrwNo();
-  if (statsCache.freq && statsCache.latestDrwNo >= estimated) {
-    const d = new Date(statsCache.updatedAt).toLocaleDateString('ko-KR');
-    const nextSat = getNextSaturdayStr();
-    updateStatusUI('ok', `${statsCache.latestDrwNo}회차 최신 · ${d} 업데이트 · 다음 추첨 ${nextSat}`);
-    showToast(`✅ 이미 최신이에요 · 다음 추첨일: ${nextSat}`);
-    return;
-  }
-  await initStatsData();
+  await checkAndRefresh();
 }
 
 // ─────────────────────────────────────────
 //  UI HELPERS
 // ─────────────────────────────────────────
 function updateStatusUI(state, text) {
-  document.getElementById('status-dot').className = 'status-dot ' + state;
-  document.getElementById('status-text').textContent = text;
+  // status-dot/text는 결과 카드 안에 있을 때만 존재 — null-safe 처리
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  if (dot) dot.className = 'status-dot ' + state;
+  if (txt) txt.textContent = text;
+  // 데이터 상태를 내부적으로 저장해두고 카드 렌더 시 반영
+  window._lastStatus = { state, text };
 }
 function showLoadOverlay(show, text) {
   const el = document.getElementById('load-overlay');
@@ -772,105 +791,257 @@ function addWin() {
 // ─────────────────────────────────────────
 //  PROBABILITY
 // ─────────────────────────────────────────
-function onProbClick() { buildDD(document.getElementById('prob-input').value); document.getElementById('prob-dropdown').classList.add('open'); }
-function onProbInput() { buildDD(document.getElementById('prob-input').value); document.getElementById('prob-dropdown').classList.add('open'); }
+// ─────────────────────────────────────────
+//  PROB PAGE — 드롭다운 + 무한스크롤 + 확률계산
+// ─────────────────────────────────────────
+const DD_PAGE_SIZE = 5;   // 처음 노출 개수
+let ddOffset       = 0;   // 무한스크롤 오프셋
+let ddFiltered     = [];  // 현재 필터된 티켓 목록
+let selectedProbId = null;
 
-function buildDD(query) {
+// 드롭다운 박스 클릭
+function onProbBoxClick() {
+  const input = document.getElementById('prob-input');
+  input.removeAttribute('readonly');
+  input.focus();
+  openProbDropdown();
+}
+
+// 입력 이벤트
+function onProbInput(e) {
+  const val = e.target.value;
+  const clearBtn = document.getElementById('prob-clear');
+  clearBtn.classList.toggle('visible', val.length > 0);
+  ddOffset = 0;
+  openProbDropdown();
+}
+
+// X 버튼으로 입력 지우기
+function clearProbInput(e) {
+  e.stopPropagation();
+  const input = document.getElementById('prob-input');
+  input.value = '';
+  input.removeAttribute('readonly');
+  input.focus();
+  document.getElementById('prob-clear').classList.remove('visible');
+  ddOffset = 0;
+  openProbDropdown();
+}
+
+function openProbDropdown() {
   const dd = document.getElementById('prob-dropdown');
-  if (!tickets.length) { dd.innerHTML = '<div class="prob-dd-empty">저장된 티켓이 없어요</div>'; return; }
-  const q = query.trim();
-  const filtered = !q ? tickets : tickets.filter(t => {
-    const tokens = q.split(/[\s,]+/).filter(s => /\d/.test(s));
-    return tokens.every(tok => t.nums.some(n => String(n).includes(tok)));
-  });
-  if (!filtered.length) { dd.innerHTML = '<div class="prob-dd-empty">검색 결과가 없어요</div>'; return; }
-  dd.innerHTML = filtered.map(t =>
-    `<div class="prob-dd-item" onclick="selectTicket('${t.id}')">
-      <div style="display:flex;gap:3px;">${t.nums.map(n =>
+  const chevron = document.getElementById('prob-chevron');
+  dd.classList.add('open');
+  chevron.classList.add('open');
+  renderDropdownItems(false);
+}
+
+function closeProbDropdown() {
+  document.getElementById('prob-dropdown').classList.remove('open');
+  document.getElementById('prob-chevron').classList.remove('open');
+  document.getElementById('prob-input').setAttribute('readonly', true);
+}
+
+// 드롭다운 아이템 렌더 (무한스크롤)
+function renderDropdownItems(append) {
+  const dd    = document.getElementById('prob-dropdown');
+  const query = document.getElementById('prob-input').value.trim();
+
+  // 최근 업데이트순 정렬
+  const sorted = [...tickets].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+  // 숫자 토큰 검색 필터
+  if (!append) {
+    ddFiltered = !query
+      ? sorted
+      : sorted.filter(t => {
+          const tokens = query.split(/[\s,]+/).filter(s => /\d/.test(s));
+          return tokens.every(tok => t.nums.some(n => String(n).includes(tok)));
+        });
+    ddOffset = 0;
+  }
+
+  const slice   = ddFiltered.slice(0, ddOffset + DD_PAGE_SIZE);
+  const hasMore = ddFiltered.length > ddOffset + DD_PAGE_SIZE;
+
+  if (!ddFiltered.length) {
+    dd.innerHTML = `<div class="prob-dd-empty">${query ? '일치하는 티켓이 없어요' : '저장된 티켓이 없어요'}</div>`;
+    return;
+  }
+
+  const itemsHtml = slice.map(t => {
+    const isSelected = t.id === selectedProbId;
+    return `<div class="prob-dd-item${isSelected ? ' selected' : ''}" onclick="selectProbTicket('${t.id}')">
+      <div style="display:flex;gap:3px;flex-shrink:0">${t.nums.map(n =>
         `<div class="mini-ball ${colorClass(n)}" style="width:24px;height:24px;font-size:9px">${n}</div>`
       ).join('')}</div>
       <span style="margin-left:auto;font-size:11px;color:var(--text3);white-space:nowrap">${t.purchases.length}회 구매</span>
-    </div>`
-  ).join('');
+      ${isSelected ? '<span style="color:var(--gold);font-size:11px">✓</span>' : ''}
+    </div>`;
+  }).join('');
+
+  const footerHtml = hasMore
+    ? `<div class="prob-dd-footer" onclick="loadMoreDD()">+ 더 보기 (${ddFiltered.length - ddOffset - DD_PAGE_SIZE}개 남음)</div>`
+    : (ddFiltered.length > DD_PAGE_SIZE ? `<div class="prob-dd-footer" style="cursor:default">총 ${ddFiltered.length}개</div>` : '');
+
+  if (!append) {
+    dd.innerHTML = itemsHtml + footerHtml;
+  } else {
+    // 기존 footer 제거 후 아이템 추가
+    const footer = dd.querySelector('.prob-dd-footer');
+    if (footer) footer.remove();
+    dd.insertAdjacentHTML('beforeend', itemsHtml.replace(/<div class="prob-dd-item/g,
+      '<div class="prob-dd-item new-item') + footerHtml);
+  }
 }
 
-function selectTicket(id) {
-  const t = tickets.find(x => x.id === id);
-  document.getElementById('prob-input').value = t.nums.join('  ');
-  document.getElementById('prob-dropdown').classList.remove('open');
-  calcProb(id);
+function loadMoreDD() {
+  ddOffset += DD_PAGE_SIZE;
+  renderDropdownItems(false);
+  // 스크롤 유지
+  const dd = document.getElementById('prob-dropdown');
+  dd.scrollTop = dd.scrollHeight;
 }
 
-async function calcProb(id) {
+// 티켓 선택
+function selectProbTicket(id) {
+  selectedProbId = id;
   const t = tickets.find(x => x.id === id);
   if (!t) return;
 
-  const hasStats   = !!(statsCache.freq && statsCache.totalDraws > 0);
-  const totalDraws = statsCache.totalDraws || 1;
-  const freq       = hasStats
-    ? statsCache.freq
-    : (() => { const f = {}; for (let i = 1; i <= 45; i++) f[i] = Math.round(totalDraws * 6 / 45); return f; })();
+  // 입력창에 번호 표시
+  const input = document.getElementById('prob-input');
+  input.value = t.nums.join('  ');
+  input.setAttribute('readonly', true);
+  document.getElementById('prob-clear').classList.add('visible');
 
+  // 선택된 티켓 미리보기
+  const preview = document.getElementById('prob-selected');
+  preview.style.display = 'flex';
+  preview.innerHTML = t.nums.map(n =>
+    `<div class="mini-ball ${colorClass(n)}">${n}</div>`
+  ).join('') + `<span style="margin-left:auto;font-size:11px;color:var(--text3)">${t.purchases.length}회 구매</span>`;
+
+  closeProbDropdown();
+  renderProbResult(id);
+}
+
+// 확률 결과 렌더
+function renderProbResult(id) {
+  const t        = tickets.find(x => x.id === id);
+  const area     = document.getElementById('prob-result-area');
+  const hasStats = !!(statsCache.freq && statsCache.totalDraws > 0);
+
+  // 데이터 없으면 안내 박스
+  if (!hasStats) {
+    area.innerHTML = `
+      <div class="card">
+        <div class="no-data-box">
+          <div class="no-data-icon">📡</div>
+          <div class="no-data-msg">
+            확률 계산을 위해 동행복권 당첨 데이터가 필요해요.<br>
+            아래 버튼을 눌러 전체 회차 데이터를 불러오세요.<br>
+            <span style="font-size:11px;color:var(--text3)">처음 한 번만 진행되며, 이후엔 매주 새 회차만 업데이트돼요.</span>
+          </div>
+          <button class="btn-load" id="btn-load-data" onclick="startLoadData()">
+            📥 동행복권 데이터 불러오기
+          </button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // 확률 계산
+  const totalDraws = statsCache.totalDraws;
   let prob = 1;
   const numProbs = [];
   t.nums.forEach(n => {
-    const p = freq[n] / totalDraws;
-    numProbs.push({ n, p: p * 100, count: freq[n] });
+    const p = statsCache.freq[n] / totalDraws;
+    numProbs.push({ n, p: p * 100, count: statsCache.freq[n] });
     prob *= p;
   });
   const probPct = (prob * 100).toFixed(7);
 
-  const result = document.getElementById('prob-result');
-  result.classList.remove('hidden');
-  result.innerHTML = `
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
-      ${t.nums.map(n => `<div class="mini-ball ${colorClass(n)}">${n}</div>`).join('')}
-    </div>
-    <div class="prob-display">
-      <div class="prob-num">${probPct}%</div>
-      <div class="prob-label">이 번호 조합의 추정 당첨 확률${!hasStats ? ' (데이터 로드 전)' : ''}</div>
-    </div>
-    <div class="section-label" style="margin-bottom:10px">번호별 출현 확률 (${totalDraws}회차 기준)</div>
-    ${numProbs.map(({ n, p, count }) => `
-      <div class="prob-history-item">
-        <span style="display:flex;align-items:center;gap:8px">
-          <div class="mini-ball ${colorClass(n)}" style="width:24px;height:24px;font-size:9px;flex-shrink:0">${n}</div>
-          ${n}번 <span style="color:var(--text3);font-size:11px">(${count}회 출현)</span>
-        </span>
-        <span style="font-family:'Space Mono',monospace;color:var(--gold)">${p.toFixed(4)}%</span>
-      </div>`).join('')}
-    <div class="divider"></div>
-    <div class="section-label">과거 1등 당첨 이력</div>
-    <div id="win-hist" style="padding:14px;text-align:center;color:var(--text3);font-size:13px">
-      ⏳ 전체 회차 조회 중...
-    </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:12px;line-height:1.7">
-      ※ 출현 확률 = 해당 번호 누적 출현 횟수 ÷ 전체 회차 수<br>
-      ※ 조합 확률 = 각 번호 출현 확률의 곱<br>
-      ${hasStats ? `※ 데이터 출처: 동행복권 (1~${statsCache.latestDrwNo}회차)` : ''}
-    </div>`;
-
-  // 당첨 이력: statsCache.winNums에서 즉시 조회 (추가 API 호출 없음)
-  const histEl = document.getElementById('win-hist');
-  if (!histEl) return;
-
-  if (!statsCache.winNums || statsCache.winNums.length === 0) {
-    histEl.innerHTML = '<div style="padding:8px 0;text-align:center;color:var(--text3);font-size:13px">데이터 로드 후 조회 가능해요 (확률 탭 상단 업데이트 버튼)</div>';
-    return;
-  }
-
+  // 당첨 이력 (캐시에서 즉시)
   const targetKey = [...t.nums].sort((a, b) => a - b).join(',');
-  const matches = statsCache.winNums.filter(w =>
+  const matches   = (statsCache.winNums || []).filter(w =>
     [...w.nums].sort((a, b) => a - b).join(',') === targetKey
   );
 
-  histEl.innerHTML = matches.length > 0
-    ? matches.map(m =>
-        `<div class="prob-history-item"><span>${m.drwNoDate} · 제${m.drwNo}회</span><span class="badge badge-won">1등 당첨 🏆</span></div>`
-      ).join('')
-    : '<div style="padding:8px 0;text-align:center;color:var(--text3);font-size:13px">이 번호 조합의 과거 1등 당첨 이력이 없어요</div>';
+  const d = new Date(statsCache.updatedAt).toLocaleDateString('ko-KR');
+
+  area.innerHTML = `
+    <div class="card">
+      <!-- 데이터 상태 -->
+      <div class="data-status" id="data-status">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="status-dot ok" id="status-dot"></span>
+          <span id="status-text" style="font-size:12px;color:var(--text2)">${statsCache.latestDrwNo}회차 기준 · ${totalDraws}회차 · ${d} 업데이트</span>
+        </div>
+        <button class="btn-load" style="padding:5px 12px;font-size:11px;font-weight:500;background:transparent;border:1px solid var(--border);color:var(--text3)" onclick="checkAndRefresh()">↻ 업데이트</button>
+      </div>
+
+      <!-- 조합 당첨확률 -->
+      <div class="prob-display">
+        <div class="prob-num">${probPct}%</div>
+        <div class="prob-label">이 번호 조합의 추정 당첨 확률 (전체 ${totalDraws}회차 기준)</div>
+      </div>
+
+      <!-- 번호별 출현 확률 -->
+      <div class="section-label" style="margin-bottom:10px">번호별 출현 확률</div>
+      ${numProbs.map(({ n, p, count }) => `
+        <div class="prob-history-item">
+          <span style="display:flex;align-items:center;gap:8px">
+            <div class="mini-ball ${colorClass(n)}" style="width:24px;height:24px;font-size:9px;flex-shrink:0">${n}</div>
+            ${n}번 <span style="color:var(--text3);font-size:11px">(${count}회 출현)</span>
+          </span>
+          <span style="font-family:'Space Mono',monospace;color:var(--gold)">${p.toFixed(4)}%</span>
+        </div>`).join('')}
+
+      <!-- 과거 1등 당첨 이력 -->
+      <div class="divider"></div>
+      <div class="section-label">과거 1등 당첨 이력</div>
+      ${matches.length > 0
+        ? matches.map(m => `
+          <div class="prob-history-item">
+            <span>${m.drwNoDate} · 제${m.drwNo}회</span>
+            <span class="badge badge-won">1등 당첨 🏆</span>
+          </div>`).join('')
+        : `<div style="padding:12px 0;text-align:center;color:var(--text3);font-size:13px">
+            이 번호 조합의 과거 1등 당첨 이력이 없어요
+           </div>`
+      }
+
+      <div style="font-size:11px;color:var(--text3);margin-top:12px;line-height:1.7">
+        ※ 출현 확률 = 해당 번호 누적 출현 횟수 ÷ 전체 회차 수<br>
+        ※ 조합 확률 = 각 번호 출현 확률의 곱<br>
+        ※ 데이터 출처: 동행복권 (1~${statsCache.latestDrwNo}회차)
+      </div>
+    </div>`;
+  // 카드가 DOM에 추가된 후 status 동기화
+  if (window._lastStatus) updateStatusUI(window._lastStatus.state, window._lastStatus.text);
 }
 
+// 불러오기 버튼 — 데이터 없을 때
+async function startLoadData() {
+  const btn = document.getElementById('btn-load-data');
+  if (btn) { btn.disabled = true; btn.textContent = '불러오는 중...'; }
+  await initStatsData();
+  // 로드 완료 후 선택된 티켓 결과 다시 렌더
+  if (selectedProbId) renderProbResult(selectedProbId);
+}
+
+// 업데이트 버튼 — 이미 최신이면 안내, 아니면 로드
+async function checkAndRefresh() {
+  const estimated = estimatedLatestDrwNo();
+  if (statsCache.freq && statsCache.latestDrwNo >= estimated) {
+    const nextSat = getNextSaturdayStr();
+    showToast(`✅ 이미 최신이에요 · 다음 추첨: ${nextSat}`);
+    return;
+  }
+  await initStatsData();
+  if (selectedProbId) renderProbResult(selectedProbId);
+}
 // ─────────────────────────────────────────
 //  UTILS
 // ─────────────────────────────────────────
@@ -897,8 +1068,7 @@ function showToast(msg) {
 
 document.addEventListener('click', e => {
   const wrap = document.getElementById('prob-wrap');
-  if (wrap && !wrap.contains(e.target))
-    document.getElementById('prob-dropdown').classList.remove('open');
+  if (wrap && !wrap.contains(e.target)) closeProbDropdown();
 });
 document.querySelectorAll('.modal-bg').forEach(bg =>
   bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('open'); })
