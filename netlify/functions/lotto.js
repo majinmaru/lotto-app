@@ -27,7 +27,7 @@ function fetchUrl(url, hop = 0) {
     if (hop > 5) return reject(new Error("too many redirects"));
     const mod = url.startsWith("https") ? https : http;
     const req = mod.get(url, {
-      timeout: 4500,
+      timeout: 3000, // 개별 요청 3초 — 20개 동시 기준 9초 이내 완료
       headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json,*/*" },
     }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -79,16 +79,9 @@ function estimateLatest() {
   return drawDone ? weeks + 1 : weeks;
 }
 
-async function resolveLatest() {
-  const est = estimateLatest();
-  // 추정값 ~ 추정값-1 범위만 확인 (±2 범위는 불필요한 호출)
-  for (let n = est; n >= est - 1; n--) {
-    try {
-      const d = await fetchDraw(n);
-      if (d && d.returnValue === "success") return n;
-    } catch (_) {}
-  }
-  return est - 1;
+function resolveLatest() {
+  // API 호출 없이 날짜 계산만으로 즉시 반환 — 타임아웃 원천 차단
+  return estimateLatest();
 }
 
 // 동시 20개 fetch (4.5초 타임아웃 × 20개 = 충분히 10초 이내)
