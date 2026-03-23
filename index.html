@@ -292,37 +292,39 @@
 
 <script>
 // ═══════════════════════════════════════════
-//  CONFIG — Netlify 배포 후 자동으로 같은 도메인 사용
+//  CONFIG
 // ═══════════════════════════════════════════
-const API_BASE = '/.netlify/functions/lotto'; // 직접 호출
+const API_BASE = '/.netlify/functions/lotto';
 
 // ═══════════════════════════════════════════
 //  TICKET DATA (localStorage)
 // ═══════════════════════════════════════════
 let tickets = [];
 try { tickets = JSON.parse(localStorage.getItem('lotto_tickets') || '[]'); } catch(e) { tickets=[]; }
-tickets = tickets.map((t,i)=>({...t,createdAt:t.createdAt||(Date.now()-(tickets.length-i)*60000),updatedAt:t.updatedAt||(Date.now()-(tickets.length-i)*60000)}));
+tickets = tickets.map((t,i) => ({
+  ...t,
+  createdAt: t.createdAt || (Date.now() - (tickets.length - i) * 60000),
+  updatedAt: t.updatedAt || (Date.now() - (tickets.length - i) * 60000),
+}));
 persistTickets();
 
 // ═══════════════════════════════════════════
-//  DRAW DATA (동행복권 당첨 회차 데이터)
-//  구조: { draws: [{drwNo, drwNoDate, drwtNo1..6, bnusNo}], lastUpdated, latestDrwNo }
+//  STATS CACHE
+//  구조: { freq:{1:N,...45:N}, totalDraws, latestDrwNo, latestDate, updatedAt }
+//  크기: ~500바이트 (원본 대비 1/500)
 // ═══════════════════════════════════════════
-let drawDB = { draws: [], lastUpdated: null, latestDrwNo: 0 };
+let statsCache = { freq: null, totalDraws: 0, latestDrwNo: 0, latestDate: null, updatedAt: null };
 try {
-  const saved = localStorage.getItem('lotto_drawdb');
-  if (saved) drawDB = JSON.parse(saved);
+  const saved = localStorage.getItem('lotto_stats');
+  if (saved) statsCache = JSON.parse(saved);
 } catch(e) {}
 
-function persistDrawDB() {
-  try { localStorage.setItem('lotto_drawdb', JSON.stringify(drawDB)); } catch(e) {
-    // localStorage 용량 초과 시 오래된 데이터 정리 후 재시도
-    showToast('⚠️ 저장 공간이 부족해요. 일부 데이터가 메모리에만 유지됩니다.');
-  }
+function persistStats() {
+  try { localStorage.setItem('lotto_stats', JSON.stringify(statsCache)); } catch(e) {}
 }
 
 // ═══════════════════════════════════════════
-//  API CALLS
+//  API
 // ═══════════════════════════════════════════
 async function apiGet(params) {
   const qs = new URLSearchParams(params).toString();
@@ -331,140 +333,48 @@ async function apiGet(params) {
   return res.json();
 }
 
-// 최신 회차 번호 조회
-async function fetchLatestDrwNo() {
-  const data = await apiGet({ type: 'latest' });
-  return data.latestDrwNo;
-}
-
-// ★ 배치 사이즈 10 — 함수 1회 호출당 10회차, 클라이언트에서 루프
-// Netlify 무료 함수 타임아웃 10초 내 안정적으로 처리 가능한 최대치
-const BATCH = 10;
-
-async function fetchRange(from, to, onProgress) {
-  const results = [];
-  for (let start = from; start <= to; start += BATCH) {
-    const end = Math.min(start + BATCH - 1, to);
-    let data;
-    // 실패 시 1회 재시도
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        data = await apiGet({ type: 'range', from: start, to: end });
-        break;
-      } catch(e) {
-        if (attempt === 1) throw e;
-        await new Promise(r => setTimeout(r, 500));
-      }
-    }
-    if (data && data.draws) results.push(...data.draws);
-    if (onProgress) onProgress(results.length, to - from + 1);
-    // 배치 간 100ms 딜레이 — 동행복권 서버 차단 방지
-    if (end < to) await new Promise(r => setTimeout(r, 100));
-  }
-  return results;
-}
-
 // ═══════════════════════════════════════════
-//  DRAW DB INIT & UPDATE
+//  STATS INIT & UPDATE
+//  서버에서 전체 집계 → 요약본(freq)만 저장
+//  localStorage 사용량: ~500B (이전 방식 대비 1/500)
 // ═══════════════════════════════════════════
-async function initDrawData() {
+async function initStatsData() {
   updateStatusUI('loading', '데이터 확인 중...');
-
   try {
-    const latestDrwNo = await fetchLatestDrwNo();
+    // stats 타입: 서버가 전체 회차 집계 후 freq 요약만 반환
+    const data = await apiGet({ type: 'stats' });
 
-    // 처음 실행 (데이터 없음)
-    if (drawDB.draws.length === 0) {
-      showLoadOverlay(true, `전체 ${latestDrwNo}회차 데이터를 가져오는 중이에요\n처음 한 번만 시간이 걸려요 (약 3~5분)`);
-      const draws = await fetchRange(1, latestDrwNo, (loaded, total) => {
-        updateLoadProgress(`${loaded} / ${total}회차`);
-      });
-      drawDB = { draws, lastUpdated: Date.now(), latestDrwNo };
-      persistDrawDB();
-      showLoadOverlay(false);
-      const lastDate = new Date().toLocaleDateString('ko-KR');
-      updateStatusUI('ok', `${latestDrwNo}회차까지 로드 완료 · 전체 ${draws.length}회차 · ${lastDate} 업데이트`);
-      showToast(`✅ ${draws.length}회차 데이터 로드 완료!`);
-      return;
-    }
+    // 데이터 유효성 검사
+    if (!data.freq || !data.latestDrwNo) throw new Error('invalid response');
 
-    // 이미 최신
-    if (drawDB.latestDrwNo >= latestDrwNo) {
-      const lastDate = drawDB.lastUpdated ? new Date(drawDB.lastUpdated).toLocaleDateString('ko-KR') : '-';
-      updateStatusUI('ok', `${latestDrwNo}회차 최신 · 전체 ${drawDB.draws.length}회차 · ${lastDate} 업데이트`);
-      return;
-    }
+    statsCache = {
+      freq:        data.freq,
+      totalDraws:  data.fetchedCount || data.latestDrwNo,
+      latestDrwNo: data.latestDrwNo,
+      latestDate:  data.latestDate,
+      updatedAt:   Date.now(),
+    };
+    persistStats();
 
-    // 새 회차 추가
-    const missing = latestDrwNo - drawDB.latestDrwNo;
-    updateStatusUI('loading', `새 회차 ${missing}개 업데이트 중...`);
-    const newDraws = await fetchRange(drawDB.latestDrwNo + 1, latestDrwNo);
-    drawDB.draws.push(...newDraws);
-    drawDB.latestDrwNo = latestDrwNo;
-    drawDB.lastUpdated = Date.now();
-    persistDrawDB();
-    const lastDate = new Date(drawDB.lastUpdated).toLocaleDateString('ko-KR');
-    updateStatusUI('ok', `${latestDrwNo}회차까지 최신 · 전체 ${drawDB.draws.length}회차 · ${lastDate} 업데이트`);
-    showToast(`🆕 ${newDraws.length}개 회차 업데이트 완료!`);
+    const lastDate = new Date(statsCache.updatedAt).toLocaleDateString('ko-KR');
+    updateStatusUI('ok', `${statsCache.latestDrwNo}회차 기준 · 전체 ${statsCache.totalDraws}회차 · ${lastDate} 업데이트`);
+    showToast('✅ 확률 데이터 로드 완료!');
 
   } catch(err) {
-    console.error('[initDrawData]', err);
-    if (drawDB.draws.length > 0) {
-      updateStatusUI('warn', `오프라인 · 캐시 데이터 사용 중 (${drawDB.latestDrwNo}회차까지)`);
+    console.error('[initStats]', err);
+    if (statsCache.freq) {
+      // 캐시가 있으면 오프라인이어도 동작
+      const lastDate = statsCache.updatedAt ? new Date(statsCache.updatedAt).toLocaleDateString('ko-KR') : '-';
+      updateStatusUI('warn', `캐시 데이터 사용 중 · ${statsCache.latestDrwNo}회차까지 · ${lastDate}`);
     } else {
-      updateStatusUI('err', `데이터 로드 실패: ${err.message}`);
+      updateStatusUI('err', `데이터 로드 실패 · ${err.message}`);
     }
-    showLoadOverlay(false);
   }
 }
 
 async function refreshDrawData() {
-  if (drawDB.draws.length === 0) { await initDrawData(); return; }
   updateStatusUI('loading', '최신 데이터 확인 중...');
-  try {
-    const latestDrwNo = await fetchLatestDrwNo();
-    if (drawDB.latestDrwNo >= latestDrwNo) {
-      const lastDate = new Date(drawDB.lastUpdated).toLocaleDateString('ko-KR');
-      updateStatusUI('ok', `${latestDrwNo}회차 이미 최신 · ${lastDate} 업데이트`);
-      showToast('✅ 이미 최신 데이터예요');
-      return;
-    }
-    const newDraws = await fetchRange(drawDB.latestDrwNo + 1, latestDrwNo);
-    drawDB.draws.push(...newDraws);
-    drawDB.latestDrwNo = latestDrwNo;
-    drawDB.lastUpdated = Date.now();
-    persistDrawDB();
-    const lastDate = new Date(drawDB.lastUpdated).toLocaleDateString('ko-KR');
-    updateStatusUI('ok', `${latestDrwNo}회차까지 최신 · 전체 ${drawDB.draws.length}회차 · ${lastDate} 업데이트`);
-    showToast(`🆕 ${newDraws.length}개 회차 업데이트!`);
-  } catch(err) {
-    updateStatusUI('err', `업데이트 실패: ${err.message}`);
-    showToast('⚠️ 업데이트에 실패했어요');
-  }
-}
-
-// ═══════════════════════════════════════════
-//  FREQUENCY & HISTORY COMPUTE (from drawDB)
-// ═══════════════════════════════════════════
-function computeFrequency() {
-  const freq = {};
-  for (let i = 1; i <= 45; i++) freq[i] = 0;
-  drawDB.draws.forEach(d => {
-    [d.drwtNo1,d.drwtNo2,d.drwtNo3,d.drwtNo4,d.drwtNo5,d.drwtNo6].forEach(n => {
-      if (n) freq[n]++;
-    });
-    // 보너스 번호는 확률 계산에서 제외 (당첨 6개 기준)
-  });
-  return freq;
-}
-
-function findWinHistory(nums) {
-  // 6개 번호가 모두 일치하는 회차 탐색
-  const set = new Set(nums);
-  return drawDB.draws.filter(d => {
-    const drawn = [d.drwtNo1,d.drwtNo2,d.drwtNo3,d.drwtNo4,d.drwtNo5,d.drwtNo6];
-    return drawn.every(n => set.has(n));
-  });
+  await initStatsData();
 }
 
 // ═══════════════════════════════════════════
@@ -477,19 +387,8 @@ function updateStatusUI(state, text) {
   txt.textContent = text;
 }
 
-function showLoadOverlay(show, text) {
-  const el = document.getElementById('load-overlay');
-  if (show) {
-    el.classList.remove('hidden');
-    if (text) document.getElementById('load-text').textContent = text;
-    document.getElementById('load-progress').textContent = '';
-  } else {
-    el.classList.add('hidden');
-  }
-}
-
-function updateLoadProgress(text) {
-  document.getElementById('load-progress').textContent = text;
+function showLoadOverlay(show) {
+  document.getElementById('load-overlay').classList.toggle('hidden', !show);
 }
 
 // ═══════════════════════════════════════════
@@ -500,7 +399,7 @@ function init() {
   const today = new Date().toISOString().split('T')[0];
   ['save-date','win-date','buy-date'].forEach(id => document.getElementById(id).value = today);
   renderTickets();
-  initDrawData(); // 비동기로 실행 (앱 사용을 막지 않음)
+  initStatsData(); // 비동기 — 앱 사용을 막지 않음
 }
 
 // ═══════════════════════════════════════════
@@ -511,244 +410,282 @@ let selectedNums = [];
 function buildBallGrid() {
   const grid = document.getElementById('ball-grid');
   grid.innerHTML = '';
-  for (let i=1;i<=45;i++) {
+  for (let i = 1; i <= 45; i++) {
     const b = document.createElement('button');
-    b.className='ball'; b.textContent=i; b.id='b'+i;
-    b.onclick=()=>toggleBall(i);
+    b.className = 'ball'; b.textContent = i; b.id = 'b' + i;
+    b.onclick = () => toggleBall(i);
     grid.appendChild(b);
   }
 }
 
 function colorClass(n) {
-  if(n<=10)return'color-1'; if(n<=20)return'color-2'; if(n<=30)return'color-3'; if(n<=40)return'color-4'; return'color-5';
+  if (n <= 10) return 'color-1';
+  if (n <= 20) return 'color-2';
+  if (n <= 30) return 'color-3';
+  if (n <= 40) return 'color-4';
+  return 'color-5';
 }
 
 function toggleBall(n) {
-  if(selectedNums.includes(n)) {
-    selectedNums=selectedNums.filter(x=>x!==n);
-    document.getElementById('b'+n).className='ball';
+  if (selectedNums.includes(n)) {
+    selectedNums = selectedNums.filter(x => x !== n);
+    document.getElementById('b' + n).className = 'ball';
   } else {
-    if(selectedNums.length>=6){showToast('6개만 선택할 수 있어요');return;}
+    if (selectedNums.length >= 6) { showToast('6개만 선택할 수 있어요'); return; }
     selectedNums.push(n);
-    document.getElementById('b'+n).className='ball selected';
+    document.getElementById('b' + n).className = 'ball selected';
   }
   renderSelectedRow();
 }
 
 function renderSelectedRow() {
-  const row=document.getElementById('selected-row');
-  const sorted=[...selectedNums].sort((a,b)=>a-b);
-  if(!sorted.length){row.innerHTML='<span style="font-size:12px;color:var(--text3)">번호를 선택하세요</span>';return;}
-  row.innerHTML=sorted.map(n=>`<div class="selected-ball ${colorClass(n)}">${n}</div>`).join('')
-    +`<span class="selected-count">${sorted.length}/6</span>`;
+  const row = document.getElementById('selected-row');
+  const sorted = [...selectedNums].sort((a, b) => a - b);
+  if (!sorted.length) {
+    row.innerHTML = '<span style="font-size:12px;color:var(--text3)">번호를 선택하세요</span>';
+    return;
+  }
+  row.innerHTML = sorted.map(n => `<div class="selected-ball ${colorClass(n)}">${n}</div>`).join('')
+    + `<span class="selected-count">${sorted.length}/6</span>`;
 }
 
 function clearSelection() {
-  selectedNums=[];
-  document.querySelectorAll('.ball.selected').forEach(b=>b.className='ball');
+  selectedNums = [];
+  document.querySelectorAll('.ball.selected').forEach(b => b.className = 'ball');
   renderSelectedRow();
 }
 
 function randomPick() {
-  const needed=6-selectedNums.length;
-  if(needed===0){showToast('이미 6개가 모두 선택됐어요');return;}
-  const pool=[];
-  for(let i=1;i<=45;i++) if(!selectedNums.includes(i)) pool.push(i);
-  for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
-  pool.slice(0,needed).forEach(n=>{selectedNums.push(n);document.getElementById('b'+n).className='ball selected';});
+  const needed = 6 - selectedNums.length;
+  if (needed === 0) { showToast('이미 6개가 모두 선택됐어요'); return; }
+  const pool = [];
+  for (let i = 1; i <= 45; i++) if (!selectedNums.includes(i)) pool.push(i);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  pool.slice(0, needed).forEach(n => {
+    selectedNums.push(n);
+    document.getElementById('b' + n).className = 'ball selected';
+  });
   renderSelectedRow();
-  showToast(needed===6?'🎲 랜덤 번호 6개 선택!':`🎲 ${needed}개 번호를 추가로 선택했어요!`);
+  showToast(needed === 6 ? '🎲 랜덤 번호 6개 선택!' : `🎲 ${needed}개 번호를 추가로 선택했어요!`);
 }
 
 // ═══════════════════════════════════════════
 //  SAVE TICKET
 // ═══════════════════════════════════════════
 function openSaveModal() {
-  if(selectedNums.length!==6){showToast('6개 번호를 먼저 선택해주세요');return;}
-  document.getElementById('save-nums-preview').innerHTML=[...selectedNums].sort((a,b)=>a-b).map(n=>miniball(n,34)).join('');
+  if (selectedNums.length !== 6) { showToast('6개 번호를 먼저 선택해주세요'); return; }
+  document.getElementById('save-nums-preview').innerHTML =
+    [...selectedNums].sort((a, b) => a - b).map(n => miniball(n, 34)).join('');
   document.getElementById('save-modal').classList.add('open');
 }
 
 function saveTicket() {
-  const sorted=[...selectedNums].sort((a,b)=>a-b);
-  const date=document.getElementById('save-date').value;
-  const memo=document.getElementById('save-memo').value.trim();
-  if(!date){showToast('날짜를 선택해주세요');return;}
-  const key=sorted.join(','), now=Date.now();
-  const existing=tickets.find(t=>t.nums.join(',')===key);
-  if(existing){
-    existing.purchases.push({date,memo});
-    existing.purchases.sort((a,b)=>b.date.localeCompare(a.date));
-    existing.updatedAt=now;
+  const sorted = [...selectedNums].sort((a, b) => a - b);
+  const date = document.getElementById('save-date').value;
+  const memo = document.getElementById('save-memo').value.trim();
+  if (!date) { showToast('날짜를 선택해주세요'); return; }
+  const key = sorted.join(','), now = Date.now();
+  const existing = tickets.find(t => t.nums.join(',') === key);
+  if (existing) {
+    existing.purchases.push({ date, memo });
+    existing.purchases.sort((a, b) => b.date.localeCompare(a.date));
+    existing.updatedAt = now;
     showToast('✅ 기존 티켓에 구매 이력 추가');
   } else {
-    tickets.push({id:String(now),nums:sorted,purchases:[{date,memo}],wins:[],createdAt:now,updatedAt:now});
+    tickets.push({ id: String(now), nums: sorted, purchases: [{ date, memo }], wins: [], createdAt: now, updatedAt: now });
     showToast('🎫 새 티켓 저장 완료!');
   }
   persistTickets();
   closeModal('save-modal');
   clearSelection();
-  document.getElementById('save-memo').value='';
-  currentPage=1;
+  document.getElementById('save-memo').value = '';
+  currentPage = 1;
   renderTickets();
 }
 
 // ═══════════════════════════════════════════
 //  TICKETS RENDER
 // ═══════════════════════════════════════════
-let currentPage=1, currentTicketId=null, pendingDeleteId=null;
-const PAGE_SIZE=10;
+let currentPage = 1, currentTicketId = null, pendingDeleteId = null;
+const PAGE_SIZE = 10;
 
-function persistTickets(){localStorage.setItem('lotto_tickets',JSON.stringify(tickets));}
+function persistTickets() { localStorage.setItem('lotto_tickets', JSON.stringify(tickets)); }
 
 function getSorted() {
-  const mode=document.getElementById('sort-select').value;
-  const arr=[...tickets];
-  const lw=t=>t.wins.length?[...t.wins].sort((a,b)=>b.date.localeCompare(a.date))[0].date:'';
-  if(mode==='recent-update') arr.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
-  else if(mode==='reg-newest') arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-  else if(mode==='reg-oldest') arr.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
-  else if(mode==='wins-most') arr.sort((a,b)=>{const d=b.wins.length-a.wins.length;return d||((b.createdAt||0)-(a.createdAt||0));});
-  else if(mode==='wins-least') arr.sort((a,b)=>{const d=a.wins.length-b.wins.length;return d||((b.createdAt||0)-(a.createdAt||0));});
-  else if(mode==='win-date-newest') arr.sort((a,b)=>{const da=lw(a),db=lw(b);if(!da&&!db)return(b.createdAt||0)-(a.createdAt||0);if(!da)return 1;if(!db)return-1;return db.localeCompare(da);});
-  else if(mode==='win-date-oldest') arr.sort((a,b)=>{const da=lw(a),db=lw(b);if(!da&&!db)return(b.createdAt||0)-(a.createdAt||0);if(!da)return 1;if(!db)return-1;return da.localeCompare(db);});
+  const mode = document.getElementById('sort-select').value;
+  const arr = [...tickets];
+  const lw = t => t.wins.length ? [...t.wins].sort((a, b) => b.date.localeCompare(a.date))[0].date : '';
+  if (mode === 'recent-update')    arr.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  else if (mode === 'reg-newest')  arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  else if (mode === 'reg-oldest')  arr.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  else if (mode === 'wins-most')   arr.sort((a, b) => { const d = b.wins.length - a.wins.length; return d || (b.createdAt || 0) - (a.createdAt || 0); });
+  else if (mode === 'wins-least')  arr.sort((a, b) => { const d = a.wins.length - b.wins.length; return d || (b.createdAt || 0) - (a.createdAt || 0); });
+  else if (mode === 'win-date-newest') arr.sort((a, b) => { const da = lw(a), db = lw(b); if (!da && !db) return (b.createdAt || 0) - (a.createdAt || 0); if (!da) return 1; if (!db) return -1; return db.localeCompare(da); });
+  else if (mode === 'win-date-oldest') arr.sort((a, b) => { const da = lw(a), db = lw(b); if (!da && !db) return (b.createdAt || 0) - (a.createdAt || 0); if (!da) return 1; if (!db) return -1; return da.localeCompare(db); });
   return arr;
 }
 
 function renderTickets() {
-  document.getElementById('ticket-count-badge').textContent=`총 ${tickets.length}개`;
-  const list=document.getElementById('tickets-list');
-  if(!tickets.length){
-    list.innerHTML='<div class="empty"><div class="empty-icon">🎫</div><div class="empty-text">아직 저장된 티켓이 없어요<br>번호 입력 탭에서 추가해보세요</div></div>';
-    document.getElementById('pagination').innerHTML='';return;
+  document.getElementById('ticket-count-badge').textContent = `총 ${tickets.length}개`;
+  const list = document.getElementById('tickets-list');
+  if (!tickets.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">🎫</div><div class="empty-text">아직 저장된 티켓이 없어요<br>번호 입력 탭에서 추가해보세요</div></div>';
+    document.getElementById('pagination').innerHTML = '';
+    return;
   }
-  const sorted=getSorted(), total=sorted.length, totalPages=Math.ceil(total/PAGE_SIZE);
-  if(currentPage>totalPages) currentPage=Math.max(1,totalPages);
-  const slice=sorted.slice((currentPage-1)*PAGE_SIZE,currentPage*PAGE_SIZE);
-  list.innerHTML=slice.map(t=>ticketCard(t)).join('');
+  const sorted = getSorted(), total = sorted.length;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (currentPage > totalPages) currentPage = Math.max(1, totalPages);
+  const slice = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  list.innerHTML = slice.map(t => ticketCard(t)).join('');
   renderPagination(totalPages);
 }
 
 function renderPagination(totalPages) {
-  const pg=document.getElementById('pagination');
-  if(totalPages<=1){pg.innerHTML='';return;}
-  let html=`<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
-  for(let i=1;i<=totalPages;i++) html+=`<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
-  html+=`<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===totalPages?'disabled':''}>›</button>`;
-  pg.innerHTML=html;
+  const pg = document.getElementById('pagination');
+  if (totalPages <= 1) { pg.innerHTML = ''; return; }
+  let html = `<button class="page-btn" onclick="goPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>‹</button>`;
+  for (let i = 1; i <= totalPages; i++)
+    html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+  html += `<button class="page-btn" onclick="goPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>›</button>`;
+  pg.innerHTML = html;
 }
 
-function goPage(n){currentPage=n;renderTickets();window.scrollTo({top:0,behavior:'smooth'});}
+function goPage(n) { currentPage = n; renderTickets(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 
 function ticketCard(t) {
-  const sP=[...t.purchases].sort((a,b)=>b.date.localeCompare(a.date));
-  const sW=[...t.wins].sort((a,b)=>b.date.localeCompare(a.date));
-  const lP=sP[0],oP=sP.slice(1),hasWins=sW.length>0,lW=sW[0],oW=sW.slice(1);
-  const ballsHtml=t.nums.map(n=>`<div class="mini-ball ${colorClass(n)}">${n}</div>`).join('');
-  const winStrip=hasWins?`<div class="win-strip">${sW.slice(0,3).map(w=>`<span class="win-tag">🏆 ${w.date} · ${w.rank}등</span>`).join('')}</div>`:'';
-  const oPHtml=oP.length?`<div id="op-${t.id}" class="hidden">${oP.map(p=>`<div class="history-row"><span>${p.date}${p.memo?` <span style="color:var(--text3)">· ${p.memo}</span>`:''}</span></div>`).join('')}</div><button class="expand-btn" onclick="toggle('op-${t.id}',this)"><span>이전 구매 이력 ${oP.length}건</span><span class="expand-icon">▼</span></button>`:'';
-  const oWHtml=oW.length?`<div id="ow-${t.id}" class="hidden">${oW.map(w=>`<div class="history-row"><span>${w.date}</span><span class="badge badge-won">${w.rank}등</span></div>`).join('')}</div><button class="expand-btn" onclick="toggle('ow-${t.id}',this)"><span>이전 당첨 이력 ${oW.length}건</span><span class="expand-icon">▼</span></button>`:'';
-  return`<div class="ticket${hasWins?' won':''}" id="tk-${t.id}"><div class="ticket-header" onclick="toggle('tb-${t.id}',this)"><div class="ticket-nums">${ballsHtml}</div><div class="ticket-meta"><div style="margin-bottom:4px"><span class="badge badge-count">${t.purchases.length}회 구매</span></div><div>${lP?.date||''}</div></div></div>${winStrip}<div id="tb-${t.id}" class="hidden"><div class="ticket-body"><div class="section-label">구매 이력</div><div class="history-row"><span>${lP?.date||''}${lP?.memo?` <span style="color:var(--text3)">· ${lP.memo}</span>`:''}</span><span class="badge badge-count">최신</span></div>${oPHtml}${hasWins?`<div class="divider"></div><div class="section-label">당첨 이력</div><div class="history-row"><span>${lW.date}</span><span class="badge badge-won">${lW.rank}등 🏆</span></div>${oWHtml}`:''}</div><div class="ticket-actions"><button class="btn btn-outline" style="font-size:12px;padding:8px 12px" onclick="openBuyModal('${t.id}')">🛒 구매 추가</button><button class="btn btn-outline" style="font-size:12px;padding:8px 12px;color:var(--green);border-color:rgba(46,213,115,0.3)" onclick="openWinModal('${t.id}')">🏆 당첨 기록</button><button class="btn btn-danger" style="font-size:12px;padding:8px 12px" onclick="askDelete('${t.id}')">삭제</button></div></div></div>`;
+  const sP = [...t.purchases].sort((a, b) => b.date.localeCompare(a.date));
+  const sW = [...t.wins].sort((a, b) => b.date.localeCompare(a.date));
+  const lP = sP[0], oP = sP.slice(1), hasWins = sW.length > 0, lW = sW[0], oW = sW.slice(1);
+  const ballsHtml = t.nums.map(n => `<div class="mini-ball ${colorClass(n)}">${n}</div>`).join('');
+  const winStrip = hasWins ? `<div class="win-strip">${sW.slice(0, 3).map(w => `<span class="win-tag">🏆 ${w.date} · ${w.rank}등</span>`).join('')}</div>` : '';
+  const oPHtml = oP.length ? `<div id="op-${t.id}" class="hidden">${oP.map(p => `<div class="history-row"><span>${p.date}${p.memo ? ` <span style="color:var(--text3)">· ${p.memo}</span>` : ''}</span></div>`).join('')}</div><button class="expand-btn" onclick="toggle('op-${t.id}',this)"><span>이전 구매 이력 ${oP.length}건</span><span class="expand-icon">▼</span></button>` : '';
+  const oWHtml = oW.length ? `<div id="ow-${t.id}" class="hidden">${oW.map(w => `<div class="history-row"><span>${w.date}</span><span class="badge badge-won">${w.rank}등</span></div>`).join('')}</div><button class="expand-btn" onclick="toggle('ow-${t.id}',this)"><span>이전 당첨 이력 ${oW.length}건</span><span class="expand-icon">▼</span></button>` : '';
+  return `<div class="ticket${hasWins ? ' won' : ''}" id="tk-${t.id}"><div class="ticket-header" onclick="toggle('tb-${t.id}',this)"><div class="ticket-nums">${ballsHtml}</div><div class="ticket-meta"><div style="margin-bottom:4px"><span class="badge badge-count">${t.purchases.length}회 구매</span></div><div>${lP?.date || ''}</div></div></div>${winStrip}<div id="tb-${t.id}" class="hidden"><div class="ticket-body"><div class="section-label">구매 이력</div><div class="history-row"><span>${lP?.date || ''}${lP?.memo ? ` <span style="color:var(--text3)">· ${lP.memo}</span>` : ''}</span><span class="badge badge-count">최신</span></div>${oPHtml}${hasWins ? `<div class="divider"></div><div class="section-label">당첨 이력</div><div class="history-row"><span>${lW.date}</span><span class="badge badge-won">${lW.rank}등 🏆</span></div>${oWHtml}` : ''}</div><div class="ticket-actions"><button class="btn btn-outline" style="font-size:12px;padding:8px 12px" onclick="openBuyModal('${t.id}')">🛒 구매 추가</button><button class="btn btn-outline" style="font-size:12px;padding:8px 12px;color:var(--green);border-color:rgba(46,213,115,0.3)" onclick="openWinModal('${t.id}')">🏆 당첨 기록</button><button class="btn btn-danger" style="font-size:12px;padding:8px 12px" onclick="askDelete('${t.id}')">삭제</button></div></div></div>`;
 }
 
-function toggle(id,btn){const el=document.getElementById(id);if(!el)return;el.classList.toggle('hidden');const ic=btn.querySelector?.('.expand-icon');if(ic)ic.classList.toggle('open');}
+function toggle(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('hidden');
+  const ic = btn.querySelector?.('.expand-icon');
+  if (ic) ic.classList.toggle('open');
+}
 
-function askDelete(id){pendingDeleteId=id;document.getElementById('confirm-overlay').classList.add('open');}
-function closeConfirm(){pendingDeleteId=null;document.getElementById('confirm-overlay').classList.remove('open');}
-function confirmDelete(){
-  if(!pendingDeleteId)return;
-  tickets=tickets.filter(t=>t.id!==pendingDeleteId);
-  pendingDeleteId=null;
+function askDelete(id) { pendingDeleteId = id; document.getElementById('confirm-overlay').classList.add('open'); }
+function closeConfirm() { pendingDeleteId = null; document.getElementById('confirm-overlay').classList.remove('open'); }
+function confirmDelete() {
+  if (!pendingDeleteId) return;
+  tickets = tickets.filter(t => t.id !== pendingDeleteId);
+  pendingDeleteId = null;
   document.getElementById('confirm-overlay').classList.remove('open');
-  const tp=Math.ceil(tickets.length/PAGE_SIZE);
-  if(currentPage>tp) currentPage=Math.max(1,tp);
-  persistTickets();renderTickets();showToast('티켓이 삭제됐어요');
+  const tp = Math.ceil(tickets.length / PAGE_SIZE);
+  if (currentPage > tp) currentPage = Math.max(1, tp);
+  persistTickets(); renderTickets(); showToast('티켓이 삭제됐어요');
 }
 
-function openBuyModal(id){currentTicketId=id;const t=tickets.find(x=>x.id===id);document.getElementById('buy-nums-preview').innerHTML=t.nums.map(n=>miniball(n,34)).join('');document.getElementById('buy-modal').classList.add('open');}
-function addBuy(){
-  const date=document.getElementById('buy-date').value,memo=document.getElementById('buy-memo').value.trim();
-  if(!date){showToast('날짜를 선택해주세요');return;}
-  const t=tickets.find(x=>x.id===currentTicketId);
-  t.purchases.push({date,memo});t.purchases.sort((a,b)=>b.date.localeCompare(a.date));t.updatedAt=Date.now();
-  persistTickets();renderTickets();closeModal('buy-modal');document.getElementById('buy-memo').value='';showToast('🛒 구매 이력이 추가됐어요');
+function openBuyModal(id) {
+  currentTicketId = id;
+  const t = tickets.find(x => x.id === id);
+  document.getElementById('buy-nums-preview').innerHTML = t.nums.map(n => miniball(n, 34)).join('');
+  document.getElementById('buy-modal').classList.add('open');
+}
+function addBuy() {
+  const date = document.getElementById('buy-date').value;
+  const memo = document.getElementById('buy-memo').value.trim();
+  if (!date) { showToast('날짜를 선택해주세요'); return; }
+  const t = tickets.find(x => x.id === currentTicketId);
+  t.purchases.push({ date, memo });
+  t.purchases.sort((a, b) => b.date.localeCompare(a.date));
+  t.updatedAt = Date.now();
+  persistTickets(); renderTickets(); closeModal('buy-modal');
+  document.getElementById('buy-memo').value = '';
+  showToast('🛒 구매 이력이 추가됐어요');
 }
 
-function openWinModal(id){currentTicketId=id;const t=tickets.find(x=>x.id===id);document.getElementById('win-nums-preview').innerHTML=t.nums.map(n=>miniball(n,34)).join('');document.getElementById('win-modal').classList.add('open');}
-function addWin(){
-  const date=document.getElementById('win-date').value,rank=parseInt(document.getElementById('win-rank').value);
-  if(!date){showToast('날짜를 선택해주세요');return;}
-  const t=tickets.find(x=>x.id===currentTicketId);
-  t.wins.push({date,rank});t.wins.sort((a,b)=>b.date.localeCompare(a.date));t.updatedAt=Date.now();
-  persistTickets();renderTickets();closeModal('win-modal');showToast(`🏆 ${rank}등 당첨 기록 완료!`);
+function openWinModal(id) {
+  currentTicketId = id;
+  const t = tickets.find(x => x.id === id);
+  document.getElementById('win-nums-preview').innerHTML = t.nums.map(n => miniball(n, 34)).join('');
+  document.getElementById('win-modal').classList.add('open');
+}
+function addWin() {
+  const date = document.getElementById('win-date').value;
+  const rank = parseInt(document.getElementById('win-rank').value);
+  if (!date) { showToast('날짜를 선택해주세요'); return; }
+  const t = tickets.find(x => x.id === currentTicketId);
+  t.wins.push({ date, rank });
+  t.wins.sort((a, b) => b.date.localeCompare(a.date));
+  t.updatedAt = Date.now();
+  persistTickets(); renderTickets(); closeModal('win-modal');
+  showToast(`🏆 ${rank}등 당첨 기록 완료!`);
 }
 
 // ═══════════════════════════════════════════
-//  PROBABILITY
+//  PROBABILITY (statsCache 기반)
 // ═══════════════════════════════════════════
-function onProbClick(){buildDD(document.getElementById('prob-input').value);document.getElementById('prob-dropdown').classList.add('open');}
-function onProbInput(){buildDD(document.getElementById('prob-input').value);document.getElementById('prob-dropdown').classList.add('open');}
+function onProbClick() { buildDD(document.getElementById('prob-input').value); document.getElementById('prob-dropdown').classList.add('open'); }
+function onProbInput() { buildDD(document.getElementById('prob-input').value); document.getElementById('prob-dropdown').classList.add('open'); }
 
 function buildDD(query) {
-  const dd=document.getElementById('prob-dropdown');
-  if(!tickets.length){dd.innerHTML='<div class="prob-dd-empty">저장된 티켓이 없어요</div>';return;}
-  const q=query.trim();
-  const filtered=!q?tickets:tickets.filter(t=>{
-    const tokens=q.split(/[\s,]+/).filter(s=>/\d/.test(s));
-    return tokens.every(tok=>t.nums.some(n=>String(n).includes(tok)));
+  const dd = document.getElementById('prob-dropdown');
+  if (!tickets.length) { dd.innerHTML = '<div class="prob-dd-empty">저장된 티켓이 없어요</div>'; return; }
+  const q = query.trim();
+  const filtered = !q ? tickets : tickets.filter(t => {
+    const tokens = q.split(/[\s,]+/).filter(s => /\d/.test(s));
+    return tokens.every(tok => t.nums.some(n => String(n).includes(tok)));
   });
-  if(!filtered.length){dd.innerHTML='<div class="prob-dd-empty">검색 결과가 없어요</div>';return;}
-  dd.innerHTML=filtered.map(t=>`<div class="prob-dd-item" onclick="selectTicket('${t.id}')"><div style="display:flex;gap:3px;">${t.nums.map(n=>`<div class="mini-ball ${colorClass(n)}" style="width:24px;height:24px;font-size:9px">${n}</div>`).join('')}</div><span style="margin-left:auto;font-size:11px;color:var(--text3);white-space:nowrap">${t.purchases.length}회 구매</span></div>`).join('');
+  if (!filtered.length) { dd.innerHTML = '<div class="prob-dd-empty">검색 결과가 없어요</div>'; return; }
+  dd.innerHTML = filtered.map(t =>
+    `<div class="prob-dd-item" onclick="selectTicket('${t.id}')">
+      <div style="display:flex;gap:3px;">${t.nums.map(n => `<div class="mini-ball ${colorClass(n)}" style="width:24px;height:24px;font-size:9px">${n}</div>`).join('')}</div>
+      <span style="margin-left:auto;font-size:11px;color:var(--text3);white-space:nowrap">${t.purchases.length}회 구매</span>
+    </div>`
+  ).join('');
 }
 
 function selectTicket(id) {
-  const t=tickets.find(x=>x.id===id);
-  document.getElementById('prob-input').value=t.nums.join('  ');
+  const t = tickets.find(x => x.id === id);
+  document.getElementById('prob-input').value = t.nums.join('  ');
   document.getElementById('prob-dropdown').classList.remove('open');
   calcProb(id);
 }
 
-function calcProb(id) {
-  const t=tickets.find(x=>x.id===id);
-  if(!t)return;
+async function calcProb(id) {
+  const t = tickets.find(x => x.id === id);
+  if (!t) return;
 
-  const totalDraws = drawDB.draws.length || 1;
-  const hasRealData = drawDB.draws.length > 0;
-
-  // 번호별 빈도 계산
-  let freq;
-  if(hasRealData) {
-    freq = computeFrequency();
-  } else {
-    // 폴백: 균등 분포
-    freq = {};
-    for(let i=1;i<=45;i++) freq[i]=Math.round(totalDraws*6/45);
-  }
-
-  let prob=1;
-  const numProbs=[];
-  t.nums.forEach(n=>{
-    const p=freq[n]/totalDraws; // 한 회차에서 이 번호가 나올 확률
-    numProbs.push({n,p:p*100,count:freq[n]});
-    prob*=p;
-  });
-  const probPct=(prob*100).toFixed(7);
-
-  // 과거 당첨 이력
-  const winHistory = hasRealData ? findWinHistory(t.nums) : [];
-
-  const result=document.getElementById('prob-result');
+  const result = document.getElementById('prob-result');
   result.classList.remove('hidden');
-  result.innerHTML=`
+
+  const hasStats = statsCache.freq && statsCache.totalDraws > 0;
+  const totalDraws = statsCache.totalDraws || 1;
+  const freq = hasStats ? statsCache.freq : (() => { const f = {}; for(let i=1;i<=45;i++) f[i]=Math.round(totalDraws*6/45); return f; })();
+
+  // 번호별 확률 계산
+  let prob = 1;
+  const numProbs = [];
+  t.nums.forEach(n => {
+    const p = freq[n] / totalDraws;
+    numProbs.push({ n, p: p * 100, count: freq[n] });
+    prob *= p;
+  });
+  const probPct = (prob * 100).toFixed(7);
+
+  // 과거 당첨 이력 — 서버에 check 요청
+  result.innerHTML = `
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
-      ${t.nums.map(n=>`<div class="mini-ball ${colorClass(n)}">${n}</div>`).join('')}
+      ${t.nums.map(n => `<div class="mini-ball ${colorClass(n)}">${n}</div>`).join('')}
     </div>
     <div class="prob-display">
       <div class="prob-num">${probPct}%</div>
-      <div class="prob-label">이 번호 조합의 추정 당첨 확률${!hasRealData?' (실제 데이터 없음 · 배포 후 정확한 확률 계산)':''}</div>
+      <div class="prob-label">이 번호 조합의 추정 당첨 확률${!hasStats ? ' (데이터 로드 전)' : ''}</div>
     </div>
     <div class="section-label" style="margin-bottom:10px">번호별 출현 확률 (${totalDraws}회차 기준)</div>
-    ${numProbs.map(({n,p,count})=>`
+    ${numProbs.map(({ n, p, count }) => `
       <div class="prob-history-item">
         <span style="display:flex;align-items:center;gap:8px">
           <div class="mini-ball ${colorClass(n)}" style="width:24px;height:24px;font-size:9px;flex-shrink:0">${n}</div>
@@ -757,40 +694,68 @@ function calcProb(id) {
         <span style="font-family:'Space Mono',monospace;color:var(--gold)">${p.toFixed(4)}%</span>
       </div>`).join('')}
     <div class="divider"></div>
-    <div class="section-label">과거 당첨 이력 (전체 ${totalDraws}회차 기준)</div>
-    ${!hasRealData
-      ? `<div style="padding:16px;text-align:center;color:var(--text3);font-size:13px">Netlify 배포 후 실제 데이터로 조회 가능해요</div>`
-      : winHistory.length>0
-        ? winHistory.map(w=>`<div class="prob-history-item"><span>${w.drwNoDate} · 제${w.drwNo}회</span><span class="badge badge-won">1등 당첨 🏆</span></div>`).join('')
-        : `<div style="padding:16px;text-align:center;color:var(--text3);font-size:13px">이 번호 조합의 과거 1등 당첨 이력이 없어요</div>`
-    }
+    <div class="section-label">과거 1등 당첨 이력 조회 중...</div>
+    <div id="win-history-result" style="padding:16px;text-align:center;color:var(--text3);font-size:13px">
+      <span style="animation:pulse 1s infinite;display:inline-block">⏳ 조회 중...</span>
+    </div>
     <div style="font-size:11px;color:var(--text3);margin-top:12px;line-height:1.7">
-      ※ 출현 확률 = 해당 번호의 누적 출현 횟수 ÷ 전체 회차 수<br>
+      ※ 출현 확률 = 해당 번호 누적 출현 횟수 ÷ 전체 회차 수<br>
       ※ 조합 확률 = 각 번호 출현 확률의 곱<br>
-      ${hasRealData?`※ 데이터 출처: 동행복권 (1회~${drawDB.latestDrwNo}회차)`:''}
+      ${hasStats ? `※ 데이터 출처: 동행복권 (1회~${statsCache.latestDrwNo}회차)` : ''}
     </div>`;
+
+  // 당첨 이력은 별도 API 호출 (check 타입)
+  try {
+    const checkData = await apiGet({ type: 'check', nums: t.nums.join(',') });
+    const histEl = document.getElementById('win-history-result');
+    if (!histEl) return;
+    if (checkData.matches && checkData.matches.length > 0) {
+      histEl.innerHTML = checkData.matches.map(m =>
+        `<div class="prob-history-item"><span>${m.drwNoDate} · 제${m.drwNo}회</span><span class="badge badge-won">1등 당첨 🏆</span></div>`
+      ).join('');
+    } else {
+      histEl.innerHTML = '<div style="padding:8px 0;text-align:center;color:var(--text3);font-size:13px">이 번호 조합의 과거 1등 당첨 이력이 없어요</div>';
+    }
+  } catch(err) {
+    const histEl = document.getElementById('win-history-result');
+    if (histEl) histEl.innerHTML = `<div style="color:var(--text3);font-size:12px">이력 조회 실패: ${err.message}</div>`;
+  }
 }
 
 // ═══════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════
-function miniball(n,size){return`<div class="${colorClass(n)}" style="width:${size}px;height:${size}px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:${size>28?12:9}px;font-weight:700;flex-shrink:0">${n}</div>`;}
-
-function showPage(id,btn){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById(id).classList.add('active');btn.classList.add('active');
-  if(id==='page-tickets'){currentPage=1;renderTickets();}
+function miniball(n, size) {
+  return `<div class="${colorClass(n)}" style="width:${size}px;height:${size}px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:${size > 28 ? 12 : 9}px;font-weight:700;flex-shrink:0">${n}</div>`;
 }
-function closeModal(id){document.getElementById(id).classList.remove('open');}
-function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 
-document.addEventListener('click',e=>{
-  const wrap=document.getElementById('prob-wrap');
-  if(wrap&&!wrap.contains(e.target)) document.getElementById('prob-dropdown').classList.remove('open');
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'page-tickets') { currentPage = 1; renderTickets(); }
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('prob-wrap');
+  if (wrap && !wrap.contains(e.target)) document.getElementById('prob-dropdown').classList.remove('open');
 });
-document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{if(e.target===bg)bg.classList.remove('open');}));
-document.getElementById('confirm-overlay').addEventListener('click',e=>{if(e.target===document.getElementById('confirm-overlay'))closeConfirm();});
+document.querySelectorAll('.modal-bg').forEach(bg =>
+  bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('open'); })
+);
+document.getElementById('confirm-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('confirm-overlay')) closeConfirm();
+});
 
 init();
 </script>
